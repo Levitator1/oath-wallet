@@ -1,0 +1,23 @@
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'application'
+
+
+description = 'Back-end service for Firefox Yubikey/OATH plugin'
+    group = 'com.levitator'
+
+mainClassName = 'com.levitator.oath_wallet_service.Main'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    testImplementation     'junit:junit:4.13'
+    implementation group: 'org.glassfish', name: 'javax.json', version: '1.0.4'
+}
+
+compileJava {
+    options.compilerArgs << '-Xlint:unchecked'
+    options.debug = true
+}

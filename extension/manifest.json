@@ -1,0 +1,42 @@
+{
+
+  "manifest_version": 2,
+  "name": "oath-wallet",
+  "version": "0.1",
+  "author": "Jose Batista",
+
+  "description": "Retrieves the appropriate access code for a web site from a Yubikey",
+
+  "icons": {
+  },
+
+  "browser_specific_settings": {
+     "gecko": {
+       "id": "oath-wallet@Levitat0r",
+       "strict_min_version": "48.0"
+     }
+  },
+
+  "background": {
+	  "scripts": [ "oath-wallet-main.js" ]
+  },
+
+  "permissions": [
+	  "tabs",
+	  "activeTab",
+	  "nativeMessaging",
+	  "notifications"
+  ],
+
+  "commands": {
+  "oath-sign-in": {
+    "suggested_key": {
+      "default": "Alt+O",
+      "linux" : "Alt+O"
+    },
+    "description": "Retrieve an OATH Wallet PIN"
+  }
+  }
+
+}
+

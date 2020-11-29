@@ -1,0 +1,8 @@
+**/*.swp
+**/*.class
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/.gradle/
+service/oath_wallet_service/build/
+
