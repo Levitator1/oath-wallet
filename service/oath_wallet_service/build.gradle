@@ -1,6 +1,12 @@
+
+//plugins {
+//    id 'org.openjfx.javafxplugin' version '0.0.9'
+//}
+
 apply plugin: 'java'
 apply plugin: 'jacoco'
 apply plugin: 'application'
+
 
 
 description = 'Back-end service for Firefox Yubikey/OATH plugin'
@@ -8,15 +14,56 @@ description = 'Back-end service for Firefox Yubikey/OATH plugin'
 
 mainClassName = 'com.levitator.oath_wallet_service.Main'
 
+/*
+javafx {
+    version = "15.0.1"
+    modules = [ 'javafx.controls', 'javafx.fxml' ]
+}
+*/
+
 repositories {
-    jcenter()
+    //jcenter()
+    
+    //Local Debian 10 repo, maybe other Linux distros
+    maven {
+        url "file:///usr/share/maven-repo/"
+    }
+    
+    //Is all this dependency information missing from the Debian 10 POMs?
+    flatDir {
+       dirs '/usr/share/maven-repo/org/openjfx/javafx-graphics/11/'
+       dirs '/usr/share/maven-repo/org/openjfx/javafx-controls/11/'     
+       dirs '/usr/share/maven-repo/org/openjfx/javafx-base/debian/'
+       dirs '/usr/share/maven-repo/org/openjfx/javafx-fxml/debian/'
+
+    }
 }
 
 dependencies {
     testImplementation     'junit:junit:4.13'
     implementation group: 'org.glassfish', name: 'javax.json', version: '1.0.4'
+    implementation group: 'org.openjfx', name: 'javafx', version: '11'
+    implementation group: 'org.openjfx', name: 'javafx-graphics', version: '11'
+    implementation group: 'org.openjfx', name: 'javafx-controls', version: '11'
+    implementation group: 'org.openjfx', name: 'javafx-base', version: '11'
+    implementation group: 'org.openjfx', name: 'javafx-fxml', version: '11'
+    
+    //These dependencies kind of defeat the purpose of OS-independence, but maybe they're needed due
+    //to some omission in Debian 10's package metadata. Might build on other systems without these.
+    //Or maybe JavaFX implementations really are intended to be OS-dependent. Not sure what's going on here.
+    implementation name: 'javafx-graphics-11-linux'
+    implementation name: 'javafx-controls-11-linux'
+    implementation name: 'javafx-base-debian-linux'
+    implementation name: 'javafx-fxml-debian-linux'
 }
 
+sourceSets {
+    main {        
+        resources {
+            srcDir 'resources' 
+        }
+    }
+}
 compileJava {
     options.compilerArgs << '-Xlint:unchecked'
     options.debug = true

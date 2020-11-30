@@ -1,12 +1,16 @@
 package com.levitator.oath_wallet_service;
 
+import com.levitator.oath_wallet_service.ui.SystemTrayUI;
+
 public class Service {
     
-    public Service(String[] args){
-        
+    private SystemTrayUI system_tray_ui;
+    
+    public Service(String[] args) throws Exception{        
+        system_tray_ui = new SystemTrayUI();                                      
     }
     
-    public int run(){
+    public int run(){        
         return 0;
     }
     
