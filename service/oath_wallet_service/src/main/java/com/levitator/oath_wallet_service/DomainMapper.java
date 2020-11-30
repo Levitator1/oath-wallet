@@ -11,7 +11,7 @@ import javax.json.JsonWriter;
 public class DomainMapper {
               
     public DomainMapper() throws FileNotFoundException, IOException{   
-        var data = Parser.parserFromFile(Config.domain_config);
+        var data = Parser.parserFromFile(Config.instance.domain_config);
         
         try(var stream=data.first; var parser=data.second){
             config = new DomainMappingConfig(parser);
@@ -27,8 +27,8 @@ public class DomainMapper {
     
     public void save() throws FileNotFoundException, IOException{
         
-        var tmp = new File(Config.domain_config.toString() + ".tmp");        
-        var old = new File( Config.domain_config.toString() + ".old" );
+        var tmp = new File(Config.instance.domain_config.toString() + ".tmp");        
+        var old = new File( Config.instance.domain_config.toString() + ".old" );
         var stream = new FileOutputStream(tmp);
         
         JsonWriter writer = null;
@@ -37,9 +37,9 @@ public class DomainMapper {
             writer.writeObject( config.toJson().build() );
         }
        
-        Config.domain_config.renameTo( old );
-        tmp.renameTo( Config.domain_config );
-        Service.log( "Updated configuration: " + Config.domain_config);
+        Config.instance.domain_config.renameTo( old );
+        tmp.renameTo( Config.instance.domain_config );
+        Service.log( "Updated configuration: " + Config.instance.domain_config);
     }
     
     private DomainMappingConfig config;    
