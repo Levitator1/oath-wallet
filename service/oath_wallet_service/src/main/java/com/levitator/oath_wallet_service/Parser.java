@@ -19,6 +19,9 @@ public class Parser {
         FileInputStream is;
         try{
             is = new FileInputStream(file);
+            
+            //shared lock for reading. Implicitly gets cleaned up when the file is closed.
+            is.getChannel().lock(0, Long.MAX_VALUE, true); 
         }
         catch(FileNotFoundException ex){
             Service.log("Config file not found: " + file);

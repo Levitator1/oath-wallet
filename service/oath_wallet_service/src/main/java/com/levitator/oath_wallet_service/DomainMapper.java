@@ -30,9 +30,10 @@ public class DomainMapper {
         var tmp = new File(Config.instance.domain_config.toString() + ".tmp");        
         var old = new File( Config.instance.domain_config.toString() + ".old" );
         var stream = new FileOutputStream(tmp);
+        var lock = stream.getChannel().lock();  //Exclusive lock for writing. Gets cleaned up on file close.
         
         JsonWriter writer = null;
-        try(var writer_clean=writer; var stream_clean=stream ){
+        try(var writer_clean=writer; var release_lock=lock; var stream_clean=stream){
             writer = Json.createWriter(stream);
             writer.writeObject( config.toJson().build() );
         }

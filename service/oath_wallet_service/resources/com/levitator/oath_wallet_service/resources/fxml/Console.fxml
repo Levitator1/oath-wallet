@@ -1,0 +1,13 @@
+<?import javafx.scene.Scene ?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.TextFlow ?>
+
+<Scene xmlns:fx="https://javafx.com/fxml">
+    <root>
+        <GridPane alignment="center">
+            <TextFlow> <TextFlow/>               
+        </GridPane>
+    </root>    
+</Scene>
+

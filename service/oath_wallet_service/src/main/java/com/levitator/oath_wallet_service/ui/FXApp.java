@@ -20,18 +20,18 @@ public class FXApp extends Application{
     public void start(Stage stage) throws Exception {
         
         try{
-        //Don't exit just because there are no FX windows open
-        Platform.setImplicitExit(false);
+            //Don't exit just because there are no FX windows open
+            Platform.setImplicitExit(false);
+
+            //Put the icon in the system tray
+            tray_ui = new SystemTrayUI();
+            
+            var test = new FXMLWindow("Console");
+            test.show();
         
-        //Put the icon in the system tray
-        tray_ui = new SystemTrayUI();
-        
-        
-        //var test = new FXMLTest();
-        //test.show();
         }
         catch(Exception ex){
-            JOptionPane.showMessageDialog(null, "Unexpected error. Exiting. Error: " + ex.getLocalizedMessage(), 
+            JOptionPane.showMessageDialog(null, "Unexpected error. Exiting. Error: " + ex.getMessage(), 
                     Config.instance.app_name, JOptionPane.ERROR_MESSAGE);
         }
     }
