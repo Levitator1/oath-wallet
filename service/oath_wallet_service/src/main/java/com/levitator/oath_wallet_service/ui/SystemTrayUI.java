@@ -11,7 +11,8 @@ import java.awt.MenuItem;
 import java.awt.PopupMenu;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import java.util.function.Consumer;
+
 
 public class SystemTrayUI {
 
@@ -20,7 +21,7 @@ public class SystemTrayUI {
     private TrayIcon tray_icon;
     
         
-    public SystemTrayUI() throws Exception{
+    public SystemTrayUI(Consumer<MouseEvent> click_handler) throws Exception{
         
         if(!SystemTray.isSupported())
             throw new Exception("No system tray available");
@@ -42,6 +43,7 @@ public class SystemTrayUI {
         //Getting the tray menu to pop up for left clicks seems to be among the
         //conceptually trivial things that are nonetheless impossible in Java, or at least AWT.
         //It's always right-clicks.
+        /*
         var menu = new PopupMenu();
         var exit_menu = new MenuItem(format_menu_text("Exit"));        
         exit_menu.addActionListener((ae) -> { handle_exit_click(ae); });
@@ -49,16 +51,21 @@ public class SystemTrayUI {
         menu.add(exit_menu);        
         menu.addSeparator();
         tray_icon.setPopupMenu(menu);
-               
+        */
+        
+        tray_icon.addMouseListener( new MouseListenerBase(){ 
+            @Override
+            public void mouseClicked(MouseEvent me) {
+                click_handler.accept(me);
+            }
+        });
         system_tray.add(tray_icon);        
     }
     
     private String format_menu_text(String text){
         return "     " + text + "     ";
     }
-    
-    
-    
+
     void handle_exit_click(ActionEvent ae){
         Main.exit(0);
     }

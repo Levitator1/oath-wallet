@@ -1,9 +1,0 @@
-<?import javafx.scene.control.*?>
-<?import javafx.scene.layout.*?>
-
-<VBox xmlns:fx="http://javafx.com/fxml">
-    <children>
-        <Button text="Click Me!"/>
-    </children>
-</VBox>
-

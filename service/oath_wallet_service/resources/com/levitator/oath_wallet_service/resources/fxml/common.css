@@ -1,0 +1,10 @@
+<!-- General style rules -->
+
+* {
+    -fx-background-color: #BBBBBB;
+}
+
+.status_bar {
+    -fx-background-color: #999999;
+}
+

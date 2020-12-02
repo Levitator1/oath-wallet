@@ -1,11 +1,5 @@
 package com.levitator.oath_wallet_service.messages.common;
-
-import com.levitator.oath_wallet_service.Parser;
-import com.levitator.oath_wallet_service.Service;
 import com.levitator.oath_wallet_service.messages.common.DomainMapping;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.File;
 
 import java.util.TreeSet;
 import javax.json.Json;
