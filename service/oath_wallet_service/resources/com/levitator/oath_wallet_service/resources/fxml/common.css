@@ -1,10 +1,13 @@
-<!-- General style rules -->
+.root > * {
+    -fx-background-color: #999999;
+    -fx-padding: 5;
+}
 
-* {
-    -fx-background-color: #BBBBBB;
+.root{
+    -fx-padding: 0;
 }
 
 .status_bar {
-    -fx-background-color: #999999;
+    -fx-background-color: #777777;    
 }
 

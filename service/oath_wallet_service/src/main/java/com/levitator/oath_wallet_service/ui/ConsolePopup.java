@@ -3,14 +3,14 @@ import java.io.IOException;
 
 
 
-public class ConsolePopup extends FXMLPopup {
+public class ConsolePopup extends FXMLSystemTrayPopup {
     
     public ConsolePopup(double x, double y) throws IOException {
         super("Console", x, y);
     }
     
-    //jfx demands that the style be set before the window is ever displayed
     public ConsolePopup() throws IOException {
-        super("Console");                
+        super("Console");
     }
 }
+
