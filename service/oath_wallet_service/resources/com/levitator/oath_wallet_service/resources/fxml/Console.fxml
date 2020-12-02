@@ -4,6 +4,7 @@
 <?import javafx.scene.Scene?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.ColumnConstraints?>
@@ -12,7 +13,7 @@
 <?import javafx.scene.text.TextFlow?>
 <?scenebuilder-stylesheet common.css?>
 
-<Scene xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.levitator.oath_wallet_service.ui.ConsoleController">
+<Scene fx:id="scene" stylesheets="@Console.css" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.levitator.oath_wallet_service.ui.console.ConsoleController">
     <AnchorPane prefHeight="200" prefWidth="467.0" stylesheets="@common.css">
       <children>
          <GridPane layoutY="55.0" prefHeight="200.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
@@ -24,10 +25,14 @@
              <RowConstraints maxHeight="24.0" minHeight="24.0" prefHeight="24.0" vgrow="SOMETIMES" />
            </rowConstraints>
             <children>
-               <TextFlow prefHeight="200.0" prefWidth="200.0" />
+               <ScrollPane fx:id="scroll_pane" hbarPolicy="NEVER" pannable="true" styleClass="scroll_pane">
+                  <content>
+                     <TextFlow fx:id="text_area" prefHeight="175.0" prefWidth="451.0" />
+                  </content>
+               </ScrollPane>
                <BorderPane prefHeight="200.0" prefWidth="200.0" styleClass="status_bar" GridPane.rowIndex="1">
                   <right>
-                     <Button id="quit_button" fx:id="quit_button" mnemonicParsing="false" onAction="#handle_quit_button" text="Quit" BorderPane.alignment="CENTER" />
+                     <Button fx:id="quit_button" mnemonicParsing="false" onAction="#handle_quit_button" text="Quit" BorderPane.alignment="CENTER" />
                   </right>
                   <left>
                      <Label styleClass="status_bar" text="Status: READY" BorderPane.alignment="CENTER" />

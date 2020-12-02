@@ -1,32 +1,50 @@
-package com.levitator.oath_wallet_service.ui;
+package com.levitator.oath_wallet_service.ui.jfx;
 
-import com.levitator.oath_wallet_service.Config;
-import com.levitator.oath_wallet_service.util.Util;
+import com.levitator.oath_wallet_service.Main;
+import com.levitator.oath_wallet_service.Service;
+import com.levitator.oath_wallet_service.ui.console.ConsolePopup;
+import com.levitator.oath_wallet_service.ui.console.ConsoleWindow;
+import com.levitator.oath_wallet_service.ui.SystemTrayUI;
+import com.levitator.oath_wallet_service.ui.console.ConsoleController;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.event.MouseEvent;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import javafx.application.Application;
 import javafx.application.Platform;
-
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
-import javafx.stage.StageStyle;
-import javax.swing.JOptionPane;
 
-// This is how we start JavaFX
+// This is how we start JavaFX and the system tray icon, which is AWT
 public class FXApp extends Application{
-
+        
+    static private CompletableFuture<FXApp>  m_last_app = new CompletableFuture<>();
+    
     private String[] argv;
     private SystemTrayUI tray_ui;
     private ConsoleWindow console_ui;
     private ConsolePopup console_popup_ui;
+    private ConsoleController console_popup_controller;
     //private Stage primary_stage;
    
     
     //FX demands a default constructor
-    public FXApp(){}
-        
+    public FXApp(){                
+    }
+   
+    //A stupid solution to a stupid problem
+    static public FXApp last_app_started() throws InterruptedException, ExecutionException{
+        var result =  m_last_app.get();
+        m_last_app = new CompletableFuture<>();
+        return result;
+    }
+    
     @Override
     public void start(Stage stage) throws Exception {
+        
+        m_last_app.complete(this);
         
         try{
             //Don't exit just because there are no FX windows open
@@ -51,11 +69,12 @@ public class FXApp extends Application{
             
             //Create UI windows         
             console_ui = new ConsoleWindow();
-            console_popup_ui = new ConsolePopup();                       
+            console_popup_ui = new ConsolePopup();
+            console_popup_controller = console_popup_ui.controller(ConsoleController.class);
         }
         catch(Exception ex){
-            JOptionPane.showMessageDialog(null, "Unexpected error. Exiting. Error: " + Util.full_stack_trace_string(ex),
-                    Config.instance.app_name, JOptionPane.ERROR_MESSAGE);
+            Service.fatal("Unexpected error in GUI thread. Exiting.", ex);
+            Main.exit(-1);
         }
     }
     
@@ -82,5 +101,16 @@ public class FXApp extends Application{
         console_popup_ui.setY(p.y);
         console_popup_ui.setY(p.y);
         console_popup_ui.show();
+    }
+
+    private void write_console_text_impl(String text, Font font){
+        var text_element = new Text(text);
+        if(font != null)
+            text_element.setFont(font);
+        console_popup_controller.add_text(text_element);
+    }
+    
+    public void write_console_text(String text, Font font) {
+        Platform.runLater( ()->{ write_console_text_impl(text, font); } );
     }
 }

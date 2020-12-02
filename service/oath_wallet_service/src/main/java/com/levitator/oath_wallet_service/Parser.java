@@ -1,6 +1,7 @@
 package com.levitator.oath_wallet_service;
 
 import com.levitator.oath_wallet_service.util.Pair;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -13,30 +14,33 @@ import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
 
 public class Parser {
-    
-        static public Pair<InputStream, JsonParser> parserFromFile(File file) throws FileNotFoundException, IOException{
+     
+        static public Pair<FileInputStream, JsonParser> parserFromFile(File file) throws FileNotFoundException, IOException{
                  
         FileInputStream is;
         try{
-            is = new FileInputStream(file);
-            
-            //shared lock for reading. Implicitly gets cleaned up when the file is closed.
-            is.getChannel().lock(0, Long.MAX_VALUE, true); 
+            if(file.length() < 1){                
+                throw new EOFException("File is empty");
+            }
+            else
+                is = new FileInputStream(file);                                     
         }
-        catch(FileNotFoundException ex){
-            Service.log("Config file not found: " + file);
-            Service.log("Creating empty");
+        catch(FileNotFoundException | EOFException ex){
+            Service.instance.log("Config file not found: '" + file + "'. Creating empty.");            
             try{
                 var dir = file.getParentFile();
                 dir.mkdirs();                
                 file.createNewFile();
-                is = new FileInputStream(file);
-                Service.log("OK");
+                is = new FileInputStream(file);                                
             }
             catch(IOException ex2){
-                Service.fatal("Could not create configuration file: " + file + "\n Reason: " + ex2.getLocalizedMessage());
+                Service.instance.fatal("Could not create configuration file: " + file + "\n Reason: " + ex2.getLocalizedMessage());
                 throw ex2;
             }
+            
+            //We're going to get a JsonException below because the parser can't deal with
+            //empty files. So, let's make it specific so that we can work around it.
+            throw new EOFException("Empty file");
         }
         
         return new Pair<>(is, Json.createParser(is));

@@ -1,4 +1,5 @@
-package com.levitator.oath_wallet_service.ui;
+package com.levitator.oath_wallet_service.ui.console;
+import com.levitator.oath_wallet_service.ui.jfx.FXMLSystemTrayPopup;
 import java.io.IOException;
 
 

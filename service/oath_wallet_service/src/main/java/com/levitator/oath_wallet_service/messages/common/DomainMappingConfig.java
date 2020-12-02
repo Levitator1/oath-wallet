@@ -60,6 +60,7 @@ public class DomainMappingConfig implements MessageBase {
         return Json.createObjectBuilder().add("mappings", array);
     }
     
-    public final TreeSet<DomainMapping> mappings = new TreeSet<>();
+    public class Mappings extends TreeSet<DomainMapping>{}
+    public final Mappings mappings = new Mappings();
     
 }

@@ -12,7 +12,7 @@ public class Util {
         try{
             var elements = ex.getStackTrace();
             
-            out.println("Stack trace: " + ex.getClass().getName() + ": " + ex.getLocalizedMessage());
+            out.println("Stack trace: " + ex.getClass().getName() + ": " + ex.getMessage());
             for(var el : elements){
                 for(int i=0;i<indent;++i){
                     out.print('\t');

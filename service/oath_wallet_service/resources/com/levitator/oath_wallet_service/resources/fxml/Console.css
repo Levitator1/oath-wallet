@@ -1,3 +1,8 @@
 GridPane BorderPane{
     -fx-padding: 0;
 }
+
+TextFlow, ScrollPane {    
+    -fx-background-color: #999999;
+}
+

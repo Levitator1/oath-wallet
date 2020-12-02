@@ -1,5 +1,6 @@
-package com.levitator.oath_wallet_service.ui;
+package com.levitator.oath_wallet_service.ui.console;
 
+import com.levitator.oath_wallet_service.ui.jfx.FXMLWindow;
 import java.io.IOException;
 import javafx.stage.StageStyle;
 
