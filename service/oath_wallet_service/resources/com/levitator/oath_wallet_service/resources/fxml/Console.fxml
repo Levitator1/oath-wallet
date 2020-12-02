@@ -12,7 +12,7 @@
 <?import javafx.scene.text.TextFlow?>
 <?scenebuilder-stylesheet common.css?>
 
-<Scene xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1">
+<Scene xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.levitator.oath_wallet_service.ui.ConsoleController">
     <AnchorPane prefHeight="200" prefWidth="467.0" stylesheets="@common.css">
       <children>
          <GridPane layoutY="55.0" prefHeight="200.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
@@ -27,7 +27,7 @@
                <TextFlow prefHeight="200.0" prefWidth="200.0" />
                <BorderPane prefHeight="200.0" prefWidth="200.0" styleClass="status_bar" GridPane.rowIndex="1">
                   <right>
-                     <Button id="quit_button" mnemonicParsing="false" text="Quit" BorderPane.alignment="CENTER" />
+                     <Button id="quit_button" fx:id="quit_button" mnemonicParsing="false" onAction="#handle_quit_button" text="Quit" BorderPane.alignment="CENTER" />
                   </right>
                   <left>
                      <Label styleClass="status_bar" text="Status: READY" BorderPane.alignment="CENTER" />

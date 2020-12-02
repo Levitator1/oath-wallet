@@ -76,11 +76,11 @@ public class FXApp extends Application{
         
         Point p = MouseInfo.getPointerInfo().getLocation();        
         
-        //The screen margin doesn't get applied properly the first time. Don't know why.
-        console_popup_ui.show(); 
+        //The screen margin doesn't get applied properly the first time. Don't know why.        
         console_popup_ui.setX(p.x);
         console_popup_ui.setX(p.x);
         console_popup_ui.setY(p.y);
-        console_popup_ui.setY(p.y);                           
+        console_popup_ui.setY(p.y);
+        console_popup_ui.show();
     }
 }
