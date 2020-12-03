@@ -1,11 +1,11 @@
 package com.levitator.oath_wallet_service;
 
-import javafx.application.Platform;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class Main{
     
     //Nullable so that we can discern unexpected exits, where no result code was set   
-    static private Integer m_exit_code=null;
+    static private AtomicReference<Integer> m_exit_code = new AtomicReference<>(null);
     
     //static private Service m_service;
 
@@ -23,15 +23,15 @@ public final class Main{
             exit_code(-1);
             Service.fatal("Unexpected error. Exiting.", ex);            
         }
-        System.exit( exit_code() != null ? m_exit_code : -1);
+        System.exit( exit_code() != null ? exit_code() : -1);
     }
 
     public static void exit_code(int result){
-        m_exit_code = result;        
+        m_exit_code.set(result);
     }
     
     public static Integer exit_code(){
-        return m_exit_code;
+        return m_exit_code.get();
     }
     
 }

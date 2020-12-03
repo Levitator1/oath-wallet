@@ -13,11 +13,14 @@ public class CrossPlatform {
     }
     
     static public final Runtime runtime = Runtime.getRuntime();
-    static public final OS operating_system = get_os();
-    static public final String operating_system_name = System.getProperty("os.name");
+    static public final OS operating_system = get_os();    
+    
+    static public String get_os_name(){
+        return System.getProperty("os.name");
+    }
     
     static private OS get_os(){
-        var osstr = operating_system_name.toUpperCase();
+        var osstr = get_os_name().toUpperCase();
         
         if(osstr.startsWith("WINDOWS"))
             return OS.WINDOWS;
@@ -45,7 +48,7 @@ public class CrossPlatform {
                             
             case UNKNOWN:
             default:
-                throw new RuntimeException("Don't know how to make a fifo file on operating system named: " + operating_system_name);                
+                throw new RuntimeException("Don't know how to make a fifo file on operating system named: " + get_os_name());                
         }
         
     }

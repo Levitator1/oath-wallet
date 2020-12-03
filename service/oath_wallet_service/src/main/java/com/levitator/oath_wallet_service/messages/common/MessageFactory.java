@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service.messages.common;
 
+import com.levitator.oath_wallet_service.Parser;
 import java.lang.reflect.InvocationTargetException;
 import java.util.TreeMap;
 import javax.json.stream.JsonParser;
@@ -45,13 +46,7 @@ public class MessageFactory {
     
     //Assumes object start has been parsed
     public IMessage create(JsonParser parser){
-        if(parser.next() != JsonParser.Event.KEY_NAME)
-            throw new JsonParsingException("Expected key name", parser.getLocation());
-        
-        if(!parser.getString().equals("type"))
-            throw new JsonParsingException("First element of typed message must be 'type'", parser.getLocation());
-        
-        var type = parser.getString();
+        var type = Parser.demand_string_named(parser, "type");                
         var obj = create(type);
         obj.parse(parser);
         return obj;

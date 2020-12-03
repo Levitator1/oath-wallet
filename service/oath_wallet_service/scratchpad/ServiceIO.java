@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.util.concurrent.LinkedTransferQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import javax.json.Json;
@@ -18,10 +17,17 @@ import javax.json.JsonWriter;
 import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParsingException;
 
-//Handle connection state to a client process over the named pipe
+/*
+*
+* The complexity of this is getting kind of stupid. If we assume that communication
+* will always take the form of pairs of <query> and <reply>, then this can be done synchronously
+* and procedurally in one thread instead of three
+*
+*/
 
-public class ServiceIO {
-    
+//Handle connection state to a client process over the named pipe
+/*
+public class ServiceIO {  
     //Stuff that gets initialized on construction
     private final Semaphore m_in_queue_semaphore, m_out_queue_semaphore;
     private ReentrantLock thread_state_lock;
@@ -188,3 +194,4 @@ public class ServiceIO {
     }
     
 }
+*/

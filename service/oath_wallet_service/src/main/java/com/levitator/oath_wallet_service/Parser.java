@@ -56,4 +56,39 @@ public class Parser {
         return parser.getString();
     }
     
+    //Demand a key of a specific name
+    static public void demand_key_named(JsonParser parser, String name){        
+        if(parser.next() != Event.KEY_NAME)
+            throw new JsonParsingException("Expected a key name", parser.getLocation());
+        
+        var key = parser.getString();
+        if(!key.equals(name))
+            throw new JsonParsingException("Expected a key named '" + name + "' but got '" + key + "' instead", parser.getLocation());
+    }
+    
+    static public void demand_event(JsonParser parser, Event type){
+        var nx = parser.next();
+        if( !nx.equals(type) )
+            throw new JsonParsingException("Expected JsonParser event type #" + type.toString()
+                    + ". Got : " + nx.toString(), parser.getLocation());
+    }
+    
+    //Demand a string field having the named key
+    static public String demand_string_named(JsonParser parser, String name){
+        demand_key_named(parser, name);
+        demand_event(parser, Event.VALUE_STRING);
+        return parser.getString();   
+    }
+
+    public static long demand_long_named(JsonParser parser, String name) {
+        demand_key_named(parser, name);
+        demand_event(parser, Event.VALUE_NUMBER);
+        return parser.getLong();
+    }
+    
+    public static void demand_end_object(JsonParser parser){
+        if(parser.next() != Event.END_OBJECT)
+            throw new JsonParsingException("Expected to find end of object here", parser.getLocation());
+    }
+    
 }
