@@ -35,7 +35,7 @@
                      <Button fx:id="quit_button" mnemonicParsing="false" onAction="#handle_quit_button" text="Quit" BorderPane.alignment="CENTER" />
                   </right>
                   <left>
-                     <Label styleClass="status_bar" text="Status: READY" BorderPane.alignment="CENTER" />
+                     <Label fx:id="status_bar_text" styleClass="status_bar" text="Status: READY" BorderPane.alignment="CENTER" />
                   </left>
                   <GridPane.margin>
                      <Insets />

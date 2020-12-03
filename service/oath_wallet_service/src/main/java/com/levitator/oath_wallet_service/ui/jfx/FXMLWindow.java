@@ -30,7 +30,7 @@ public class FXMLWindow extends Stage{
         init(name);
     }
     
-    public <T, C extends Class<T>> T controller(C cls){        
+    public <T, C extends Class<T>> T controller(C cls){     
         return cls.cast(m_controller);
     }
 }

@@ -22,6 +22,7 @@ public class DomainMapping implements Comparable, MessageBase{
     
     @Override
     public void parse(JsonParser parser){
+        data = new ComparablePair<>();
         Event evt;
         String property;
         
@@ -30,10 +31,10 @@ public class DomainMapping implements Comparable, MessageBase{
             
             if(evt == JsonParser.Event.KEY_NAME){
                 property = parser.getString();
-                if( property == "url" ){
+                if( property.equals("url") ){
                     url(Parser.demand_string(parser));
                 }
-                else if( property == "cred" ){
+                else if( property.equals("cred") ){
                     data.first = Parser.demand_string(parser);
                 }
                 else
@@ -56,7 +57,7 @@ public class DomainMapping implements Comparable, MessageBase{
     }
     
     //Credential is read-only because it's used as a lookup key
-    public String url(){ return url(); }
+    public String url(){ return data.second; }
     public void url(String v){ data.second = v; }
     public String cred(){ return data.first; }
 

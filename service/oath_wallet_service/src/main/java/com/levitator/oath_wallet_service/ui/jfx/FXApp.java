@@ -113,4 +113,8 @@ public class FXApp extends Application{
     public void write_console_text(String text, Font font) {
         Platform.runLater( ()->{ write_console_text_impl(text, font); } );
     }
+
+    public void set_status_text(String text) {
+        Platform.runLater( () ->{ console_popup_controller.set_status_text(text); } );
+    }
 }

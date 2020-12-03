@@ -9,6 +9,7 @@ import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
@@ -32,6 +33,9 @@ public class ConsoleController {
     
     @FXML
     private ScrollPane scroll_pane;
+    
+    @FXML
+    private Label status_bar_text;
 
     //private Text[] text_elements;
     
@@ -54,4 +58,8 @@ public class ConsoleController {
         text_area.getChildren().add(text);
         scroll_pane.setVvalue( scroll_pane.getVmax() );
     }
+    
+    public void set_status_text(String text){
+        status_bar_text.setText(text);
+    }    
 }

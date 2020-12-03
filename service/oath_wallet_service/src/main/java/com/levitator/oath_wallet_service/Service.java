@@ -37,12 +37,17 @@ public class Service{
         try{
             m_mapper = new DomainMapper();
             log("" + m_mapper.mappings().size() + " credential entries loaded from: " + Config.instance.domain_config);
-        }
+        }        
         catch( ConfigLockedException ex ){
             //TODO
             throw new RuntimeException("Oops", ex);
         }
+        catch( Exception ex){
+            log("Could not read domain/credential mappings from: " + Config.instance.domain_config, null, ex);
+            log("You have no credentials configured. You will need to exit the program and fix the problem.");
+        }
         
+        set_status_text("Status: READY");
         while(m_gui_thread.isAlive()){
             Thread.sleep(1);
         }
@@ -61,19 +66,29 @@ public class Service{
             throw x;
         }
         finally{
-            m_mapper.close();
-            m_gui_thread.join();
+            if(m_mapper != null) 
+                m_mapper.close();
+            
+            if(m_gui_thread != null)
+                m_gui_thread.join();
         }        
+    }
+    
+    public void set_status_text(String text){
+        m_gui.set_status_text(text);
     }
     
     //Log informative messages
     public void log(String msg, Font font, Exception ex){
-        msg = make_error_message(msg, ex);
-        System.err.print(msg);
+        
+        //Let's send the stack trace solely to stderr because it makes the console
+        //popup pretty unreadable
+        var long_msg = make_error_message(msg, ex);
+        System.err.print(long_msg);
         
         try{
             if(m_gui != null && m_gui_thread != null && m_gui_thread.isAlive())
-                m_gui.write_console_text(msg, font);
+                m_gui.write_console_text(msg + "\n", font);
         }
         catch(Exception ex2){
             //Should happen very rarely if ever. Might have a slight race condition between when
