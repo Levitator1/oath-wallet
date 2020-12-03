@@ -5,6 +5,7 @@ import java.awt.SystemTray;
 import java.awt.TrayIcon;
 import com.levitator.oath_wallet_service.Config;
 import com.levitator.oath_wallet_service.Main;
+import com.levitator.oath_wallet_service.Service;
 import com.levitator.oath_wallet_service.ui.awt.MouseListenerBase;
 import java.awt.Image;
 import java.awt.MenuItem;
@@ -67,7 +68,7 @@ public class SystemTrayUI {
     }
 
     void handle_exit_click(ActionEvent ae){
-        Main.exit(0);
+        Service.instance.exit(0);
     }
     
 }

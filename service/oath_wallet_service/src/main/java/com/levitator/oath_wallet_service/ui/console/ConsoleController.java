@@ -41,7 +41,7 @@ public class ConsoleController {
     
     @FXML
     void handle_quit_button(ActionEvent event) {
-        Main.exit(0);
+        Service.instance.exit(0);
     }
 
     @FXML

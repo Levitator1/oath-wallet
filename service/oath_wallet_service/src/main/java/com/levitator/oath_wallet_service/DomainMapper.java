@@ -45,7 +45,7 @@ public class DomainMapper implements AutoCloseable{
         try{
             config = new DomainMappingConfig(data.second);
         }
-        catch(Exception ex){
+        catch(Exception ex){                                    
             Service.instance.log("Parse error", null, ex);
             Service.instance.log("It looks like you used to have a working domain mapping file, but it got corrupt. " +
                 "You will need to delete it and restart the program. Your mappings will have to be re-entered. " +

@@ -74,7 +74,7 @@ public class FXApp extends Application{
         }
         catch(Exception ex){
             Service.fatal("Unexpected error in GUI thread. Exiting.", ex);
-            Main.exit(-1);
+            Service.instance.exit(-1);
         }
     }
     

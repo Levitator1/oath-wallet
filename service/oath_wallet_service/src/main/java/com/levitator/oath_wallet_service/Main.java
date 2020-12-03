@@ -4,7 +4,9 @@ import javafx.application.Platform;
 
 public final class Main{
     
-    static private int exit_code=0;
+    //Nullable so that we can discern unexpected exits, where no result code was set   
+    static private Integer m_exit_code=null;
+    
     //static private Service m_service;
 
     //It seems like if you derive the Main class
@@ -16,15 +18,19 @@ public final class Main{
         try{
             Service.instance.run(args);            
         }
-        catch(Exception ex){            
+        catch(Exception ex){
+            exit_code(-1);
             Service.fatal("Unexpected error. Exiting.", ex);            
         }
-        System.exit(exit_code);
+        System.exit( exit_code() != null ? m_exit_code : -1);
     }
 
-    public static void exit(int result){
-        exit_code = result;
-        Platform.exit();
+    public static void exit_code(int result){
+        m_exit_code = result;        
     }
-
+    
+    public static Integer exit_code(){
+        return m_exit_code;
+    }
+    
 }

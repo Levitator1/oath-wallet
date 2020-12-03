@@ -26,7 +26,7 @@ public class FXMLSystemTrayPopup extends FXMLWindow{
         iconifiedProperty().addListener( (o) -> { if (isIconified()) hide(); }  );
         showingProperty().addListener( (o) -> { setIconified(false); });
      
-        //Because there is no reasonable native way to do a system tray popup, we pop up a window in the general
+        //Because there is no reasonable native way to do a system tray popup (other than an AWT menu), we pop up a window in the general
         //vacinity of the mouse at the point in time at which we receive a system tray click, so we need to nudge
         //that position inward so that the window fits inside the screen, being that system trays are usually way out
         //at the edge of the screen
