@@ -16,6 +16,7 @@ public final class Main{
         //m_service = new Service();
         
         try{
+            Thread.currentThread().setName(Config.instance.app_name + " Main Thread");
             Service.instance.run(args);            
         }
         catch(Exception ex){

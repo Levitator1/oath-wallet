@@ -3,13 +3,27 @@ package com.levitator.oath_wallet_service;
 import com.levitator.oath_wallet_service.ui.jfx.FXApp;
 import com.levitator.oath_wallet_service.util.Util;
 import java.io.IOException;
+import java.nio.channels.FileLockInterruptionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedTransferQueue;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.text.Font;
 import javax.swing.JOptionPane;
+import com.levitator.oath_wallet_service.messages.common.IMessage;
+import com.levitator.oath_wallet_service.messages.common.MessageFactory;
+import com.levitator.oath_wallet_service.util.CrossPlatform;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.util.concurrent.Semaphore;
+import javax.json.Json;
+import javax.json.JsonWriter;
+import javax.json.stream.JsonParser;
+import javax.json.stream.JsonParser.Event;
+import javax.json.stream.JsonParsingException;
 
 public class Service{
     
@@ -19,23 +33,29 @@ public class Service{
     private Thread m_gui_thread;
     private DomainMapper m_mapper;
     private Thread service_thread;
+
     
     //Construct this on the main the thread
     private Service(){
         service_thread = Thread.currentThread();
-    }
+    }        
     
-    private void message_loop() throws InterruptedException{
-        while(true){
-            Thread.sleep(1000);
-        }
+    private void message_loop() throws GeneralInterruptException, FileNotFoundException, IOException{                                   
+        
+        set_status_text("Status: READY");
+                
+        //Probably won't need this, but it's for completeness to catch all the possible
+        //ways an interrupt event can be thrown
+        //catch(FileLockInterruptionException ex){
+        //    throw new GeneralInterruptException(ex);
+        //}
     }
     
     private void do_run() throws InterruptedException, IOException, ExecutionException{        
         //This launches another thread for all the GUI stuff and then wastefully blocks the current thread
         //So, we launch a thread to launch the GUI thread so that it gets blocked instead
         //Application.launch(FXApp.class, m_args);
-        m_gui_thread = new Thread( () -> { Application.launch(FXApp.class, m_args);  } );
+        m_gui_thread = new Thread( () -> { Application.launch(FXApp.class, m_args);  }, "GUI Launch Thread" );
         m_gui_thread.start();                
         m_gui = FXApp.last_app_started();
                
@@ -60,12 +80,20 @@ public class Service{
             log("You have no credentials configured. You will need to exit the program and fix the problem.");
         }
         
-        set_status_text("Status: READY");
+        //Create the FIFO for client instances to talk to us (the server/gui instance)
+        if( !Config.instance.fifo_path.toFile().exists() ){
+            var result = CrossPlatform.mkfifo( Config.instance.fifo_path );
+            if(result != 0){
+                log("\"Unable to create IPC fifo: '\" + Config.instance.fifo_path + \"' Result code: \" + result");
+                log("If you are running Linux or an operating system that permits it, you should be able to create this fifo manually and try again.");
+                throw new RuntimeException("Failed creating FIFO");
+            }
+        }
         
         try{
             message_loop();            
         }
-        catch(InterruptedException ex){
+        catch(GeneralInterruptException ex){
             if(Main.exit_code() == null){
                 log("Unexpected interrupt ocurred. Exiting...", null, ex);                
                 exit(-1); //Tells the GUI thread to exit and sets Main's return code
@@ -109,7 +137,7 @@ public class Service{
     }
     
     //Log informative messages
-    public void log(String msg, Font font, Exception ex){
+    public synchronized void log(String msg, Font font, Exception ex){
         
         //Let's send the stack trace solely to stderr because it makes the console
         //popup pretty unreadable

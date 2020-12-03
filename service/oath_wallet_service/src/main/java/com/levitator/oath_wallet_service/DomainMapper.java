@@ -58,20 +58,22 @@ public class DomainMapper implements AutoCloseable{
     public void save() throws FileNotFoundException, IOException{
         
         var tmp = new File(Config.instance.domain_config.toString() + ".tmp");        
-        var old = new File( Config.instance.domain_config.toString() + ".old" );
+        var old = new File( Config.instance.domain_config.toString() + ".old" );                
         var tmp_stream = new FileOutputStream(tmp);
-        
-        //Don't need to lock for saving purposes, as such
-        //var tmp_lock = tmp_stream.getChannel().lock();  //Exclusive lock for writing. Gets cleaned up on file close.
-        
+        var tmp_stream_lock = tmp_stream.getChannel().lock();
+                
         JsonWriter tmp_writer = null;
         tmp_writer = Json.createWriter(tmp_stream);
         
-        try{
-            
+        try{            
             tmp_writer.writeObject( config.toJson().build() );            
             Config.instance.domain_config.renameTo( old );
             tmp.renameTo( Config.instance.domain_config );
+            map_file_lock.close();
+
+            //TODO: Make sure that the lock is preserved across the rename operation
+            //Since it's probably implemented using file descriptors, then hopefully it works
+            map_file_lock = tmp_stream_lock; 
             Service.instance.log( "Updated configuration: " + Config.instance.domain_config);
         }
         finally{

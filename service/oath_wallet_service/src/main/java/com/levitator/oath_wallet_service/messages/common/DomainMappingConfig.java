@@ -8,7 +8,7 @@ import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
 
-public class DomainMappingConfig implements MessageBase {
+public class DomainMappingConfig implements IMessage {
     
     public DomainMappingConfig(JsonParser parser){
         parse(parser);

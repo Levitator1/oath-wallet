@@ -4,6 +4,7 @@ package com.levitator.oath_wallet_service.util;
 import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.file.Path;
 import java.util.Locale;
 
 public class Util {
@@ -45,6 +46,5 @@ public class Util {
         stack_traces(ex, stream);
         stream.flush();
         return byte_stream.toString();
-    }
-    
+    }    
 }

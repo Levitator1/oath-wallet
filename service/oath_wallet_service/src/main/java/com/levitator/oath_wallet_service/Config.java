@@ -24,10 +24,11 @@ public class Config {
     //Suitable for a Linux-style environment. Windows users will want something else.
     //TODO: Support Windows
     public final Path config_dir = Path.of(System.getenv("HOME")).resolve(".oath_wallet");
+    public final Path fifo_path = config_dir.resolve("fifo");
     public final String package_dir = "/com/levitator/oath_wallet_service/";
     public final String resource_dir = package_dir + "resources/";
     public final String fxml_dir = resource_dir + "fxml/";
-    public final int console_buffer_length = 1024;
+    public final int console_buffer_length = 1024;    
     
     public final String domain_config_name = "mappings.json";
     public final File domain_config = config_dir.resolve(domain_config_name).toFile();

@@ -8,7 +8,7 @@ import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
 
-public class DomainMapping implements Comparable, MessageBase{
+public class DomainMapping implements Comparable, IMessage{
     
     private ComparablePair<String, String> data; //credential, and url
     
