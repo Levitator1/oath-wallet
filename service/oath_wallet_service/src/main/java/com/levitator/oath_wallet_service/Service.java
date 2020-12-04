@@ -17,13 +17,14 @@ import com.levitator.oath_wallet_service.messages.in.QuitMessage;
 import com.levitator.oath_wallet_service.messages.out.ErrorMessage;
 import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
+import com.levitator.oath_wallet_service.util.NioFileInputStream;
+import com.levitator.oath_wallet_service.util.NioFileOutputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.nio.CharBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import javax.json.Json;
-import javax.json.JsonWriter;
+import javax.json.JsonException;
 import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
@@ -38,8 +39,8 @@ public class Service{
     private Thread service_thread;
 
     //Message loop stuff
-    FileInputStream m_in_stream;
-    FileOutputStream m_out_stream;
+    NioFileInputStream m_in_stream;
+    NioFileOutputStream m_out_stream;
     JsonParser m_parser;    
 
     public DomainMapper mapper() {
@@ -69,6 +70,7 @@ public class Service{
        writer.write(msg.toJson().build());
        writer.close();
        bufstream.writeTo(m_out_stream);
+       m_out_stream.write('\n'); //Makes the protocol a bit easier to raed
        m_out_stream.flush();
     }
     
@@ -111,8 +113,9 @@ public class Service{
         //and it seems to do so non-interruptibly
         check_interrupt();
         //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
-        m_in_stream = new FileInputStream(Config.instance.fifo_path.toFile());
-        m_out_stream = new FileOutputStream(Config.instance.fifo_path.toFile());
+        //NIO is supposed to be fully interruptible, but I guess Open JDK didn't account for the one-sided fifo case
+        m_in_stream = new NioFileInputStream(Config.instance.fifo_path.toFile());
+        m_out_stream = new NioFileOutputStream(Config.instance.fifo_path.toFile());
         check_interrupt();
         m_parser = Json.createParser(m_in_stream);        
         
@@ -132,10 +135,19 @@ public class Service{
             try{
                 process_message();
             }
+            catch(JsonException ex){
+                //Ok, so because we hacked together an interruptible NIO-based implemention of the streams, as a result, some Json
+                //errors are due to interrupts, but we have to search the cause chain to find out which, so that we
+                //can exit cleanly for those instead of logging or reporting them as errors
+                ClosedByInterruptException cause = Util.search_causes(ClosedByInterruptException.class, ex);
+                if( cause != null)
+                    throw new GeneralInterruptException(cause); //clean exit
+            }
             catch(InterruptedException ex){
-                throw new GeneralInterruptException(ex);
+                throw new GeneralInterruptException(ex); //clean exit
             }
             catch(Exception ex){
+                //Report an unexpected error, which we recover from by resetting the IO state
                 log("Error processing service IO", null, ex);
                 reset_io();
             }
@@ -305,7 +317,7 @@ public class Service{
         //our own serve-side open operation may be non-interruptibly blocked waiting for a connection
         try{
             try(var out = new FileOutputStream(Config.instance.fifo_path.toFile())){}
-            m_in_stream.close();
+            //m_in_stream.close();
             service_thread.interrupt();            
         }
         catch(Exception ex){}

@@ -41,23 +41,24 @@ public class IOState{
         m_in_data.write(m_in_buf.array(), m_in_buf.arrayOffset(), count);
         
         //This is kind of terrible but I don't know how else to make it interruptible
+        /*
         try{
             var is = new ByteArrayInputStream( m_in_data.toByteArray() );
             var parser = Json.createParser(is);
             
         }
-        
+        */
     }
     
     private void input_loop(){
         while(true){
                         
-            fetch_message();
+            //fetch_message();
             
         }
     }
     
-    @Override
+    //@Override
     public void run() {
         try{
            new_session();

@@ -5,6 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Locale;
 
 public class Util {
@@ -46,5 +49,28 @@ public class Util {
         stack_traces(ex, stream);
         stream.flush();
         return byte_stream.toString();
+    }
+    
+    //A chain of exceptions in forward causal order
+     static public ArrayList<Throwable> causal_chain(Throwable t){
+         var result = new ArrayList<Throwable>();
+         
+         for(;t != null; t=t.getCause()){
+             result.add(t);
+         }
+         Collections.reverse(result);
+         return result;
+     }
+    
+    //Search "ex" for E in the causal chain
+    //Yep, it's checked
+    @SuppressWarnings("unchecked")
+    static public <E extends Exception> E search_causes(Class<E> exc, Exception ex){
+        
+        for(var t : causal_chain(ex) ){
+            if(exc.isAssignableFrom(t.getClass()))
+                return (E)t;
+        }            
+        return null;
     }    
 }
