@@ -15,7 +15,7 @@ function notify(title, message){
 }
 
 notify("More Initialization Woots", "MORE WOOTS");
-:
+
 function fetch_pin_command_failure(message){
 	notify("Unexpected error retrieving active browser window: " + message);
 }
@@ -138,8 +138,6 @@ async function fetch_pin_command(){
 
 	tab = await get_active_tab();
 	console.log("Processing PIN request for site: " + tab.url);
-
-
 }
 
 async function browser_command_handler (command) {
@@ -154,7 +152,25 @@ async function browser_command_handler (command) {
   }
 }
 
+var backend = null;
+
+function connect_to_backend(){
+    backend = browser.runtime.connectNative('com.levitator.oath_wallet_service');
+    debugger;
+    backend.onMessage.addListener( function(msg) {
+        console.log("Received" + msg);
+    });
+    
+    backend.onDisconnect.addListener(function() {
+        console.log("Disconnected");
+    });
+}
+
 // Main
-browser.commands.onCommand.addListener(browser_command_handler);
-browser.runtime.onMessage.addListener(handleMessage);
+connect_to_backend();
+
+//backend.postMessage({ text: "Hello, my_application" });
+
+browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
+//browser.runtime.onMessage.addListener(handleMessage);
 

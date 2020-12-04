@@ -1,7 +1,7 @@
 {
 
   "manifest_version": 2,
-  "name": "oath-wallet",
+  "name": "com.levitator.oath_wallet",
   "version": "0.1",
   "author": "Jose Batista",
 
@@ -12,7 +12,7 @@
 
   "browser_specific_settings": {
      "gecko": {
-       "id": "oath-wallet@Levitat0r",
+       "id": "com.levitator.oath_wallet@Levitat0r",
        "strict_min_version": "48.0"
      }
   },

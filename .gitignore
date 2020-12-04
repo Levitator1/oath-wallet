@@ -6,3 +6,4 @@
 **/.gradle/
 service/oath_wallet_service/build/
 
+/extension/nbproject/private/

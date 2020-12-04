@@ -1,0 +1,7 @@
+{
+  "name": "com.levitator.oath_wallet_service",
+  "description": "Backend and GUI for OATH Wallet, Firefox Yubikey OATH Integration",
+  "path": "/home/j/.local/bin/com.levitator.oath_wallet_service",
+  "type": "stdio",
+  "allowed_extensions": [ "com.levitator.oath_wallet@Levitat0r" ]
+}

@@ -22,6 +22,7 @@ import com.levitator.oath_wallet_service.util.NioFileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.nio.channels.ClosedByInterruptException;
 import javax.json.Json;
 import javax.json.JsonException;
@@ -61,7 +62,7 @@ public class Service{
         service_thread = Thread.currentThread();
     }        
     
-    public void send_to_client( OutMessage msg ) throws IOException{
+    static public void send_message( OutMessage msg, OutputStream out) throws IOException{
         
         //Looks like we have to buffer these objects one at a time because a given parser
         //seems to expect a single document root
@@ -69,9 +70,13 @@ public class Service{
        var writer = Json.createWriter(bufstream);        
        writer.write(msg.toJson().build());
        writer.close();
-       bufstream.writeTo(m_out_stream);
-       m_out_stream.write('\n'); //Makes the protocol a bit easier to raed
-       m_out_stream.flush();
+       bufstream.writeTo(out);
+       out.write('\n'); //Makes the protocol a bit easier to raed
+       out.flush();
+    }
+    
+    public void send_to_client(OutMessage msg) throws IOException{
+        send_message(msg, m_out_stream);
     }
     
     public void error_to_client(String message, long session) throws IOException{
@@ -156,27 +161,15 @@ public class Service{
         //We don't need to be interrupted anymore because we are awake and exiting
         Thread.interrupted(); //clears the flag
     }
-    
-    private void do_run() throws InterruptedException, IOException, ExecutionException{        
-        //This launches another thread for all the GUI stuff and then wastefully blocks the current thread
-        //So, we launch a thread to launch the GUI thread so that it gets blocked instead
-        //Application.launch(FXApp.class, m_args);
-        m_gui_thread = new Thread( () -> { Application.launch(FXApp.class, m_args);  }, "GUI Launch Thread" );
-        m_gui_thread.start();                
-        m_gui = FXApp.last_app_started();
-               
-        //Now we are free to do background stuff on a thread independent of the GUI
-        var text = Config.instance.app_title + " " + "started";
-        log(text, Config.instance.console_bold_font);
-        log(IntStream.range(0, text.length()).mapToObj(i -> "=").collect(Collectors.joining("")), Config.instance.console_bold_font);
+   
+    private void do_run() throws InterruptedException, IOException, ExecutionException{
         
         try{
-            m_mapper = new DomainMapper();
-            log("" + m_mapper.mappings().size() + " credential entries loaded from: " + Config.instance.domain_config);
+            m_mapper = new DomainMapper();            
         }        
         catch( ConfigLockedException ex ){
-            //TODO
-            throw new RuntimeException("Oops", ex);
+            m_mapper = null;
+            return;
         }
         catch( Exception ex){
             //TODO: Since JFX offers no reasonable way to show popup notifications, we willl
@@ -185,6 +178,31 @@ public class Service{
             log("Could not read domain/credential mappings from: " + Config.instance.domain_config, null, ex);
             log("You have no credentials configured. You will need to exit the program and fix the problem.");
         }
+        
+        //If the mapping file is already claimed, then there is already a process running,
+        //so, let's run in pipe mode, as a relay
+        if(m_mapper == null){
+            try{
+                var pipe_mode = new PipeMode();
+                pipe_mode.run();
+            }
+            catch(Exception ex){
+                
+            }
+        }
+        
+        //This launches another thread for all the GUI stuff and then wastefully blocks the current thread
+        //So, we launch a thread to launch the GUI thread so that it gets blocked instead
+        //Application.launch(FXApp.class, m_args);
+        m_gui_thread = new Thread( () -> { Application.launch(FXApp.class, m_args);  }, "GUI Launch Thread" );
+        m_gui_thread.start();                
+        m_gui = FXApp.last_app_started();
+                       
+        //Now we are free to do background stuff on a thread independent of the GUI
+        var text = Config.instance.app_title + " " + "started";        
+        log(text, Config.instance.console_bold_font);
+        log(IntStream.range(0, text.length()).mapToObj(i -> "=").collect(Collectors.joining("")), Config.instance.console_bold_font);
+        log("" + m_mapper.mappings().size() + " credential entries loaded from: " + Config.instance.domain_config);
                        
         try{
             //Create the FIFO for client instances to talk to us (the server/gui instance)

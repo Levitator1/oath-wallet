@@ -14,6 +14,18 @@ description = 'Back-end service for Firefox Yubikey/OATH plugin'
 
 mainClassName = 'com.levitator.oath_wallet_service.Main'
 
+application{
+    mainClassName = 'com.levitator.oath_wallet_service.Main'
+}
+
+jar {
+  manifest {
+    attributes(          
+      'Main-Class': 'com.levitator.oath_wallet_service.Main',
+    )
+  }
+}
+
 /*
 javafx {
     version = "15.0.1"
