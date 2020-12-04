@@ -4,6 +4,7 @@ import com.levitator.oath_wallet_service.Parser;
 import java.lang.reflect.InvocationTargetException;
 import java.util.TreeMap;
 import javax.json.stream.JsonParser;
+import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
 
 /*
@@ -23,7 +24,7 @@ public class MessageFactory {
         return s_instance;
     }
     
-    public <T extends IMessage> void add(String name, Class<? extends T> cls){
+    public <T extends TypedMessage> void add(String name, Class<? extends T> cls){
         if(s_message_registry.putIfAbsent(name, cls) != null)
             throw new RuntimeException("Duplicate message type of name: " + name);
     }
@@ -49,6 +50,11 @@ public class MessageFactory {
         var type = Parser.demand_string_named(parser, "type");                
         var obj = create(type);
         obj.parse(parser);
+        
+        //Object can't collect its own end tag, otherwise it couldn't be extended through inheritance
+        if( parser.next() != Event.END_OBJECT )
+            throw new JsonParsingException("Expected end of object", parser.getLocation());
+        
         return obj;
     }
     

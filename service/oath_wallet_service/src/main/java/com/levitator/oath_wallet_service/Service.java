@@ -14,11 +14,16 @@ import com.levitator.oath_wallet_service.messages.common.MessageFactory;
 import com.levitator.oath_wallet_service.messages.in.InMessage;
 import com.levitator.oath_wallet_service.messages.in.PINRequest;
 import com.levitator.oath_wallet_service.messages.in.QuitMessage;
+import com.levitator.oath_wallet_service.messages.out.ErrorMessage;
+import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.nio.CharBuffer;
 import javax.json.Json;
+import javax.json.JsonWriter;
 import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParser.Event;
 import javax.json.stream.JsonParsingException;
@@ -33,8 +38,13 @@ public class Service{
     private Thread service_thread;
 
     //Message loop stuff
-    FileInputStream in_stream;
-    JsonParser in_parser;
+    FileInputStream m_in_stream;
+    FileOutputStream m_out_stream;
+    JsonParser m_parser;    
+
+    public DomainMapper mapper() {
+        return m_mapper;
+    }
     
     static class MessageRegister{
         MessageRegister(){
@@ -50,17 +60,34 @@ public class Service{
         service_thread = Thread.currentThread();
     }        
     
+    public void send_to_client( OutMessage msg ) throws IOException{
+        
+        //Looks like we have to buffer these objects one at a time because a given parser
+        //seems to expect a single document root
+       var bufstream = new ByteArrayOutputStream();
+       var writer = Json.createWriter(bufstream);        
+       writer.write(msg.toJson().build());
+       writer.close();
+       bufstream.writeTo(m_out_stream);
+       m_out_stream.flush();
+    }
+    
+    public void error_to_client(String message, long session) throws IOException{
+        var packet = new ErrorMessage(message, session);
+        send_to_client(packet);
+    }
+    
     private void process_message() throws InterruptedException, Exception{
         
-        if( !in_parser.hasNext() ){
+        if( !m_parser.hasNext() ){
             log("Client disconnect");
             reset_io();
         }
             
-        if(in_parser.next() != Event.START_OBJECT)
-            throw new JsonParsingException ("Expected start of JSON object", in_parser.getLocation());
+        if(m_parser.next() != Event.START_OBJECT)
+            throw new JsonParsingException ("Expected start of JSON object", m_parser.getLocation());
         
-        var obj = (InMessage)MessageFactory.instance().create(in_parser);
+        var obj = (InMessage)MessageFactory.instance().create(m_parser);              
         obj.process(this);        
     }
     
@@ -69,16 +96,30 @@ public class Service{
             throw new GeneralInterruptException(new InterruptedException());
     }
     
-    private void reset_io() throws FileNotFoundException, GeneralInterruptException{
+    private void reset_io() throws FileNotFoundException, GeneralInterruptException, IOException{
 
+        if(m_parser != null)
+            m_parser.close();
+        
+        if(m_in_stream != null)
+            m_in_stream.close();
+                      
+        if(m_out_stream != null)
+            m_out_stream.close();
+        
         //The file-open may block if the other side of the pipe is not yet connected
         //and it seems to do so non-interruptibly
         check_interrupt();
         //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
-        in_stream = new FileInputStream(Config.instance.fifo_path.toFile());
+        m_in_stream = new FileInputStream(Config.instance.fifo_path.toFile());
+        m_out_stream = new FileOutputStream(Config.instance.fifo_path.toFile());
         check_interrupt();
-
-        in_parser = Json.createParser(in_stream);
+        m_parser = Json.createParser(m_in_stream);        
+        
+        //We will treat the incoming connection as a streaming array of json objects
+        //Because if you read a top-level object, the parser expects to see EOF immediately
+        if(m_parser.next() != Event.START_ARRAY)
+            throw new JsonParsingException("Service input must be at an object array at the top level", m_parser.getLocation());        
     }
     
     private void message_loop() throws GeneralInterruptException, FileNotFoundException, IOException{                                   
@@ -187,11 +228,11 @@ public class Service{
             if(m_mapper != null) 
                 m_mapper.close();
 
-            if(in_parser != null)
-                in_parser.close();
+            if(m_parser != null)
+                m_parser.close();
             
-            if(in_stream != null)
-                in_stream.close();
+            if(m_in_stream != null)
+                m_in_stream.close();
             
             gui_shutdown();
                 
@@ -211,7 +252,7 @@ public class Service{
         //Let's send the stack trace solely to stderr because it makes the console
         //popup pretty unreadable
         var long_msg = make_error_message(msg, ex);
-        System.err.print(long_msg);
+        System.err.println(long_msg);
         
         try{
             if(m_gui != null && m_gui_thread != null && m_gui_thread.isAlive())
@@ -258,15 +299,15 @@ public class Service{
         Main.exit_code(i); //This sets the exit code for when main() returns
                 
         //Everything below is dedicated to unblocking the main thread so that
-        //it notices it's time to exit
-        
-        service_thread.interrupt();
+        //it notices it's time to exit                
         
         //Open the FIFO for writing as if a client were connected because otherwise
         //our own serve-side open operation may be non-interruptibly blocked waiting for a connection
         try{
             try(var out = new FileOutputStream(Config.instance.fifo_path.toFile())){}
+            m_in_stream.close();
+            service_thread.interrupt();            
         }
         catch(Exception ex){}
-    }
+    } 
 }

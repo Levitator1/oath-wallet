@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service.util;
 
+import com.levitator.oath_wallet_service.StringReturnProcess;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -35,6 +36,8 @@ public class CrossPlatform {
     static public int mkfifo(Path path) throws IOException, InterruptedException{
         
         switch(operating_system){
+            
+            //TODO
             case WINDOWS:
                 throw new RuntimeException("Named pipes are not implemented for Windows yet." + 
                         "If you are a coder, maybe you can figure out how to call the pipe APIs using JNI. Sorry." + 
@@ -52,5 +55,44 @@ public class CrossPlatform {
         }
         
     }
+ 
+    static public String auto_detect_command_path(String cmd){
+        
+        //falls back to the plain command name if it can't find a more specific path
+        switch(CrossPlatform.operating_system){
+            case LINUX:
+                //Under Linux there is a standard command to find out where other commands come from
+                //Also, bash is pretty much always in the same place
+                var proc = new StringReturnProcess("/usr/bin/bash", "-l", "-c", "which $1", "which", cmd);
+                
+                try{
+                    var path = proc.run();
+                    if(path.endsWith("\n"))
+                        return path.substring(0, path.length()-1);
+                    else
+                        return path;
+                }
+                catch(Exception ex){
+                    return cmd;
+                }                
+                
+            //TODO: Make this work if it doesn't already work
+            case WINDOWS:
+            default:
+                return cmd;
+        }
+    }
     
+    //The OS-specific path that user-specific configuration files go in
+    //In linux this is ~ or $HOME
+    //In Windows, this is somewhere else and I'm too lazy to go look it up, so TODO
+    static public Path get_os_user_config_dir(){
+        switch(operating_system){
+            
+            default:
+            case LINUX:
+                return Path.of(System.getenv("HOME"));
+        }
+    }
+            
 }

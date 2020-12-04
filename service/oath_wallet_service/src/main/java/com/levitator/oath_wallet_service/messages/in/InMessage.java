@@ -1,8 +1,8 @@
 package com.levitator.oath_wallet_service.messages.in;
 
 import com.levitator.oath_wallet_service.Service;
-import com.levitator.oath_wallet_service.messages.common.TypedMessage;
+import com.levitator.oath_wallet_service.messages.common.SessionMessage;
 
-public interface InMessage extends TypedMessage{
-    public void process(Service serv) throws Exception;    
+public abstract class InMessage extends SessionMessage{        
+    public abstract void process(Service serv) throws Exception;    
 }

@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service;
 
+import com.levitator.oath_wallet_service.messages.common.DomainMapping;
 import com.levitator.oath_wallet_service.messages.common.DomainMappingConfig;
 import com.levitator.oath_wallet_service.messages.common.DomainMappingConfig.Mappings;
 import com.levitator.oath_wallet_service.util.Pair;
@@ -10,6 +11,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.FileLock;
+import java.util.ArrayList;
 import javax.json.Json;
 import javax.json.JsonWriter;
 import javax.json.stream.JsonParser;
@@ -92,6 +94,16 @@ public class DomainMapper implements AutoCloseable{
     public void close() throws IOException {
         map_file_lock.close();      //probably superfluous
         map_file_ostream.close();
+    }
+    
+    public ArrayList<DomainMapping> map(String url){
+        var result = new ArrayList<DomainMapping>();
+        
+        for(var entry : config.mappings){
+            if( entry.matcher() != null && entry.matcher().match(url) )
+                result.add(entry);
+        }
+        return result;
     }
     
 }

@@ -5,7 +5,7 @@ import com.levitator.oath_wallet_service.Service;
 import javax.json.stream.JsonParser;
 
 
-public class QuitMessage implements InMessage{
+public class QuitMessage extends InMessage{
 
     @Override
     public void process(Service serv) throws InterruptedException{

@@ -1,7 +1,12 @@
 package com.levitator.oath_wallet_service.messages.common;
 
 import com.levitator.oath_wallet_service.Parser;
+import com.levitator.oath_wallet_service.Service;
 import com.levitator.oath_wallet_service.util.ComparablePair;
+import com.levitator.oath_wallet_service.util.GlobParsingException;
+import com.levitator.oath_wallet_service.util.SimpleGlobMatcher;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.json.Json;
 import javax.json.JsonObjectBuilder;
 import javax.json.stream.JsonParser;
@@ -11,6 +16,7 @@ import javax.json.stream.JsonParsingException;
 public class DomainMapping implements Comparable, IMessage{
     
     private ComparablePair<String, String> data; //credential, and url
+    private SimpleGlobMatcher m_matcher;
     
     public boolean valid(){
         return url() != null && url().length() > 0 && cred() !=null && cred().length() > 0;
@@ -49,6 +55,17 @@ public class DomainMapping implements Comparable, IMessage{
         
         if(url() == null)
             url("");
+        
+        try {
+            m_matcher = new SimpleGlobMatcher(url());
+        } catch (GlobParsingException ex) {
+            m_matcher = null;
+            Service.instance.log("URL specification for credential '" + cred() + "' was invalid: " + ex.getMessage());
+        }
+    }
+    
+    public SimpleGlobMatcher matcher(){
+        return m_matcher;
     }
     
     @Override

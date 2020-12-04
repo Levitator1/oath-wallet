@@ -12,9 +12,10 @@ import javax.json.JsonObjectBuilder;
 public interface TypedMessage extends IMessage{    
     
     //A unique type name which must be registered with MessageFactory in order 
-    //to create them by name, from incoming JSON streams
+    //to create these by name, from incoming JSON streams
     public String type();    
     
+    @Override
     public default JsonObjectBuilder toJson() {
         var builder = Json.createObjectBuilder();
         builder.add("type", type());

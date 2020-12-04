@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service;
 
+import com.levitator.oath_wallet_service.util.CrossPlatform;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
@@ -17,13 +18,15 @@ import javafx.scene.text.FontWeight;
 */
 public class Config {
 
+    public final String pwd = System.getProperty("user.dir");
     public final String app_name = "oath-wallet";
     public final String app_version = "v0.1";
     public final String app_title = app_name + " " + app_version;
     
     //Suitable for a Linux-style environment. Windows users will want something else.
     //TODO: Support Windows
-    public final Path config_dir = Path.of(System.getenv("HOME")).resolve(".oath_wallet");
+    public final Path config_dir = CrossPlatform.get_os_user_config_dir().resolve(".oath_wallet");
+    public final Path ykman_path = Path.of(CrossPlatform.auto_detect_command_path("ykman"));
     public final Path fifo_path = config_dir.resolve("fifo");
     public final String package_dir = "/com/levitator/oath_wallet_service/";
     public final String resource_dir = package_dir + "resources/";
