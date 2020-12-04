@@ -1,11 +1,20 @@
 package com.levitator.oath_wallet_service;
 
+import java.io.Closeable;
 import java.io.EOFException;
-import java.nio.channels.AsynchronousFileChannel;
-import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.concurrent.LinkedTransferQueue;
-import java.util.concurrent.Semaphore;
+import java.nio.channels.SelectableChannel;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import jdk.nio.Channels;
 
 /**
  *
@@ -15,66 +24,103 @@ import java.util.concurrent.Semaphore;
  */
 public class PipeMode {
 
-    Thread m_main_thread;
-    LinkedTransferQueue<byte[]> to_service_queue, to_client_queue;
-    Semaphore sem_to_service, sem_to_client;    
-    
-    public PipeMode(){
-        m_main_thread = Thread.currentThread();
-        to_service_queue = new LinkedTransferQueue<>();
-        to_client_queue = new LinkedTransferQueue<>();
-        sem_to_service = new Semaphore(0);
-        sem_to_client = new Semaphore(0);        
-    }
-            
-    
-    //Rather than figure out how to do asynchronous/select stuff on stdio, we 
-    //dedicate a thread to each direction
-    private void stdout_thread_proc(){
+    static class InputState{
+        public FileChannel stream;
+        public SelectableChannel channel;
+        public SelectionKey key;
+        public PrintStream out;
         
-        try{
-            while(true){
-                sem_to_client.acquire();
-                var buf = to_client_queue.take();
-                System.out.write(buf);
-            }
+        public InputState(FileChannel in, SelectableChannel chan, SelectionKey k, PrintStream out_stream){
+            stream = in;
+            channel = chan;
+            key = k;
+            out = out_stream;
         }
-        catch(Exception ex){
-            //There's basically only one thing that can go wrong in this mode, and that's IO error
-            //So, if we get an error, we clean up and exit
-            m_main_thread.interrupt();
+    }
+    
+    private Thread m_main_thread;
+    private InputState client_to_server, server_to_client;
+    private Selector selector;  
+    private ByteBuffer buffer;
+
+    class IOCloser implements Channels.SelectableChannelCloser{
+
+        private Closeable m_stream;
+        
+        IOCloser(Closeable stream){
+            m_stream = stream;
+        }
+        
+        @Override
+        public void implCloseChannel(SelectableChannel sc) throws IOException {
+            if(m_stream != null)
+                m_stream.close();
+        }
+
+        @Override
+        public void implReleaseChannel(SelectableChannel sc) throws IOException {       
         }        
     }
     
-    private void stdin_thread_proc(){
-        var buf = new byte[1024];
-        int ct;
+    public PipeMode() throws FileNotFoundException, IOException{
+        m_main_thread = Thread.currentThread();
+        var fifo_is = new FileInputStream(Config.instance.fifo_path.toFile());
+        var fifo_in = fifo_is.getChannel();
+        var fifo_out = new PrintStream(new FileOutputStream(Config.instance.fifo_path.toFile()));        
+        
+        //stdout_channel = Channels.readWriteSelectableChannel​(FileDescriptor.out, new IOCloser(null));                
+        //fifo_out_channel = Channels.readWriteSelectableChannel(fifo_out.getFD(), new IOCloser(fifo_out_channel));
+        var stdin_file_channel = new FileInputStream(FileDescriptor.in).getChannel();
+        SelectableChannel fifo_in_channel = Channels.readWriteSelectableChannel(fifo_is.getFD(), new IOCloser(fifo_is));
+        fifo_in_channel.configureBlocking(false);
+        SelectableChannel stdin_channel = Channels.readWriteSelectableChannel​(FileDescriptor.in, new IOCloser(null));
+        stdin_channel.configureBlocking(false);
+        selector = Selector.open();
+        
+        var stdin_key = stdin_channel.register(selector, SelectionKey.OP_READ);
+        var fifo_in_key = fifo_in_channel.register(selector, SelectionKey.OP_READ);
+        buffer = ByteBuffer.wrap(new byte[512]);
+        
+        client_to_server = new InputState(stdin_file_channel, stdin_channel, stdin_key, fifo_out);
+        server_to_client = new InputState(fifo_in, fifo_in_channel, fifo_in_key, System.out);
+    }                    
+    
+    private void do_io(InputState state) throws IOException{
+        
+        //state.channel.keyFor(selector).cancel();
+        //state.channel.configureBlocking(true);
+        //selector.select(0); //Commit the key cancellation
         try{
-            while(true){
-                ct = System.in.read(buf);
-                if(ct < 1)
-                    throw new EOFException();
-                
-                var buf2 = Arrays.copyOf(buf, ct);
-                to_service_queue.add(buf2);
-                sem_to_service.release();
-            }
+            buffer.limit( buffer.capacity() );
+            buffer.rewind();
+            int count = state.stream.read(buffer);
+            if(count < 0)
+                throw new EOFException();
+            buffer.flip();
+            state.out.write(buffer.array(), buffer.arrayOffset(), buffer.remaining());
+            state.out.flush();            
         }
-        catch(Exception ex){
-            m_main_thread.interrupt();
+        finally{
+            //state.channel.configureBlocking(false);
+            //state.key = state.channel.register(selector, SelectionKey.OP_READ);
         }
     }
     
-    public void run(){
-        
-        //Launch the two stdio threads
-        var stdin_thread = new Thread( ()->{ stdin_thread_proc(); }, "Pipe Mode stdin");
-        var stdout_thread = new Thread( ()->{ stdout_thread_proc(); }, "Pipe Mode stdout");        
-        stdin_thread.run();
-        stdout_thread.run();
-        
-        
-        
+    private void io_loop() throws IOException{
+        while(true){
+            selector.select();
+            var keys = selector.selectedKeys();
+            
+            if(keys.contains(client_to_server.key))
+                do_io(client_to_server);
+            
+            if(keys.contains(server_to_client.key))
+                do_io(server_to_client);
+        }
+    }
+    
+    public void run() throws IOException{
+        io_loop();
     } 
     
 }

@@ -10,6 +10,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.util.ArrayList;
 import javax.json.Json;
@@ -21,6 +22,7 @@ public class DomainMapper implements AutoCloseable{
     //We hold this exclusive lock for the lifetime of DomainMapper so that other program
     //instances know that an instance already has ownership of the daemon and front-end roles
     private FileOutputStream map_file_ostream; //Has to be an output stream to provide an exclusive lock
+    private FileChannel map_file_channel;
     private FileLock map_file_lock;
     
     private DomainMappingConfig config;
@@ -29,7 +31,8 @@ public class DomainMapper implements AutoCloseable{
         
         //Acquire an exclusive file lock. We don't actually write with this stream. It's just to hold the lock.
         map_file_ostream = new FileOutputStream(Config.instance.domain_config, true);
-        map_file_lock = map_file_ostream.getChannel().tryLock();
+        map_file_channel = map_file_ostream.getChannel();
+        map_file_lock = map_file_channel.tryLock();
         if(map_file_lock == null)
             throw new ConfigLockedException();
         
@@ -93,6 +96,7 @@ public class DomainMapper implements AutoCloseable{
     @Override
     public void close() throws IOException {
         map_file_lock.close();      //probably superfluous
+        map_file_channel.close();
         map_file_ostream.close();
     }
     

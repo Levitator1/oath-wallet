@@ -168,8 +168,7 @@ public class Service{
             m_mapper = new DomainMapper();            
         }        
         catch( ConfigLockedException ex ){
-            m_mapper = null;
-            return;
+            m_mapper = null;            
         }
         catch( Exception ex){
             //TODO: Since JFX offers no reasonable way to show popup notifications, we willl
@@ -182,13 +181,15 @@ public class Service{
         //If the mapping file is already claimed, then there is already a process running,
         //so, let's run in pipe mode, as a relay
         if(m_mapper == null){
+            log("Existing instance detected. Running in relay mode.");
             try{
                 var pipe_mode = new PipeMode();
                 pipe_mode.run();
             }
             catch(Exception ex){
-                
+                log("IO error", null, ex);                
             }
+            return;
         }
         
         //This launches another thread for all the GUI stuff and then wastefully blocks the current thread
