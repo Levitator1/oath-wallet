@@ -86,25 +86,17 @@ public class PipeMode {
         server_to_client = new InputState(fifo_in, fifo_in_channel, fifo_in_key, System.out);
     }                    
     
-    private void do_io(InputState state) throws EOFException, IOException{
-        
-        //state.channel.keyFor(selector).cancel();
-        //state.channel.configureBlocking(true);
-        //selector.select(0); //Commit the key cancellation
-        try{
-            buffer.limit( buffer.capacity() );
-            buffer.rewind();
-            int count = state.stream.read(buffer);
-            if(count < 0)
-                throw new EOFException();
-            buffer.flip();
-            state.out.write(buffer.array(), buffer.arrayOffset(), buffer.remaining());
-            state.out.flush();            
-        }
-        finally{
-            //state.channel.configureBlocking(false);
-            //state.key = state.channel.register(selector, SelectionKey.OP_READ);
-        }
+    //Irks me slightly that writes are synchronous and blocking, but there is probably
+    //platform buffering and the messages are small
+    private void do_io(InputState state) throws EOFException, IOException{       
+        buffer.limit( buffer.capacity() );
+        buffer.rewind();
+        int count = state.stream.read(buffer);
+        if(count < 0)
+            throw new EOFException();
+        buffer.flip();
+        state.out.write(buffer.array(), buffer.arrayOffset(), buffer.remaining());
+        state.out.flush();
     }
     
     private void io_loop() throws EOFException, IOException, LockException, InterruptedException{
@@ -121,8 +113,8 @@ public class PipeMode {
             }
         }
         catch(EOFException ex){
-            //I'm suprised that this has to be explicitly caught and rethrown
-            //I guess it's upcast to IOException otherwise
+            //I'm suprised that this has to be explicitly caught and rethrown for the calling function
+            //to see it as such. I guess it's upcast to IOException otherwise.
             throw ex;
         }
     }

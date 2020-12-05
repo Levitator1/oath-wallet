@@ -110,7 +110,7 @@ public class Service{
         require_parse_next(); //Demand that there be a next json element
         var next = m_parser.next();
         if(next == Event.END_ARRAY){ //It can be an array end
-            log("Client disconnect");
+            log("Client disconnect\n");
             reset_io();
             return;
         }        
