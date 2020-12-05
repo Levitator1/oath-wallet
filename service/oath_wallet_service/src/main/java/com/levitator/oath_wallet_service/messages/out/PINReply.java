@@ -1,6 +1,5 @@
 package com.levitator.oath_wallet_service.messages.out;
 
-import java.math.BigDecimal;
 import javax.json.JsonObjectBuilder;
 
 

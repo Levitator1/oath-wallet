@@ -2,6 +2,7 @@ package com.levitator.oath_wallet_service.messages.common;
 
 import com.levitator.oath_wallet_service.Parser;
 import java.lang.reflect.InvocationTargetException;
+import java.util.List;
 import java.util.TreeMap;
 import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParser.Event;
@@ -24,7 +25,27 @@ public class MessageFactory {
         return s_instance;
     }
     
-    public <T extends TypedMessage> void add(String name, Class<? extends T> cls){
+    //Retrieves the type() or protocol-level name of the class
+    //Is implemented by creating an instance and returning type()
+    static public <T extends TypedMessage> String message_name(Class<T> cls){        
+        try{
+            var cons = cls.getConstructor();
+            var obj = cons.newInstance();
+            return obj.type();
+        }
+        catch(NoSuchMethodException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex){
+            throw new RuntimeException("Reflection error");
+        }
+    }
+    
+    public <T extends TypedMessage> void add( List<Class<? extends T>> cls_array ){
+        for(var cls : cls_array){
+            add(cls);
+        }
+    }
+    
+    public <T extends TypedMessage> void add(Class<? extends T> cls){
+        var name = message_name(cls);
         if(s_message_registry.putIfAbsent(name, cls) != null)
             throw new RuntimeException("Duplicate message type of name: " + name);
     }

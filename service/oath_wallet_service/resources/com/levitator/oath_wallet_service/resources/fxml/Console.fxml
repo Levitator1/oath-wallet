@@ -14,7 +14,7 @@
 <?scenebuilder-stylesheet common.css?>
 
 <Scene fx:id="scene" stylesheets="@Console.css" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.levitator.oath_wallet_service.ui.console.ConsoleController">
-    <AnchorPane prefHeight="200" prefWidth="467.0" stylesheets="@common.css">
+    <AnchorPane prefHeight="209.0" prefWidth="672.0" stylesheets="@common.css">
       <children>
          <GridPane layoutY="55.0" prefHeight="200.0" prefWidth="200.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
            <columnConstraints>
@@ -27,7 +27,7 @@
             <children>
                <ScrollPane fx:id="scroll_pane" hbarPolicy="NEVER" pannable="true" styleClass="scroll_pane">
                   <content>
-                     <TextFlow fx:id="text_area" prefHeight="175.0" prefWidth="451.0" />
+                     <TextFlow fx:id="text_area" prefHeight="187.0" prefWidth="670.0" />
                   </content>
                </ScrollPane>
                <BorderPane prefHeight="200.0" prefWidth="200.0" styleClass="status_bar" GridPane.rowIndex="1">

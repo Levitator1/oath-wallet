@@ -1,14 +1,10 @@
 
 package com.levitator.oath_wallet_service.util;
 
-import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.Locale;
 
 public class Util {
     
@@ -72,5 +68,5 @@ public class Util {
                 return (E)t;
         }            
         return null;
-    }    
+    }     
 }

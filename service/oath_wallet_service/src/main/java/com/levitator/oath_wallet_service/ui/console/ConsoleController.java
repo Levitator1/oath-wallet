@@ -41,6 +41,7 @@ public class ConsoleController {
     
     @FXML
     void handle_quit_button(ActionEvent event) {
+        scene.getWindow().hide(); //Stalls shutdown to have windows visible
         Service.instance.exit(0);
     }
 

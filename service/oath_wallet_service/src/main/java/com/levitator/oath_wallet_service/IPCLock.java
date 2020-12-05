@@ -2,6 +2,7 @@
 package com.levitator.oath_wallet_service;
 
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -13,6 +14,7 @@ import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 
 /**
@@ -44,6 +46,7 @@ public class IPCLock implements AutoCloseable {
         LockService() throws IOException{
             sock = open_service_port(0); //OS picks an available public port
             port = sock.getLocalPort();
+            setName("IPC Lock Maintenance Thread: " + m_path);
         }
         
         private void handle_client(Socket client) throws IOException{
@@ -60,21 +63,23 @@ public class IPCLock implements AutoCloseable {
             
             while(true){
                 try{
-                    try(var client = sock.accept()){
-                        if(interrupted())
-                            throw new InterruptedException();
-                            
+                    try(var client = sock.accept()){                                                    
                         handle_client(client);
                     }
+                }                
+                catch(SocketTimeoutException ex){
+                    //We just drop the connection and keep going
                 }
-                catch(InterruptedIOException ex){
+                catch(InterruptedIOException ex){     
+                    //For IO interruption other than a socket timeout, which maybe doesn't happen and is disctinct from thread interruption?
                     return;
                 }
-                catch(Exception ex){
-                    if(Thread.interrupted())
+                catch(Exception ex){                    
+                    Service.instance.log("Unexpected exception on lock maintenance thread", null, ex);
+                }
+                finally{
+                    if(interrupted())
                         return;
-                    else
-                        Service.instance.log("Unexpected exception on lock maintenance thread", null, ex);
                 }
             }
         }
@@ -87,23 +92,33 @@ public class IPCLock implements AutoCloseable {
         @Override
         public void close() throws InterruptedException {
             this.interrupt();
-            if(Thread.currentThread() != this)
-                join();
+            if(Thread.currentThread() != this){
+                //Getting interrupted exceptions here during shutdown                
+                while(isAlive()){
+                    try{
+                        join(3000);
+                    }
+                    catch(InterruptedException ex){}
+                }
+            }
         }
     }
     
     private int retrieve_lock_port() throws FileNotFoundException, IOException{
-        byte[] data;
-        try(var in = new FileInputStream(m_path)){
-            data = in.readAllBytes();
-        }                
         
-        //This should be pretty unlikely. If the line is unterminated, then
-        //we somehow caught the lock file in the middle of being written
-        if(data[data.length-1] != '\n')
-            throw new IOException("Lock file write was incomplete!");
+        //Should be pretty unlikely to catch a lock file in the midst of being written,
+        //but we detect that anyway by expecting two lines of text. We don't leave it at one
+        //because a single line can be terminated with EOF, which doesn't distinguish.
+        String data, eof;
+        try(var in = new BufferedReader(new InputStreamReader(new FileInputStream(m_path)))){
+            data = in.readLine();
+            eof = in.readLine();
+        }                               
         
-        return Integer.parseInt( data.toString() );
+        if(!eof.equals("EOF"))
+            throw new EOFException("Read a truncated lock file");
+        
+        return Integer.parseInt( data );
     }
     
     //If we fail twice, then declare the lock both stale and half-written
@@ -115,8 +130,8 @@ public class IPCLock implements AutoCloseable {
             port = retrieve_lock_port();
         }
         catch(IOException ex){            
-            //Highly improbable that we catch a lock file in the middle of being written
-            //and then it still takes three seconds to finish. It's like a half dozen bytes
+            //Highly improbable that we would catch a lock file in the middle of being written
+            //and then have it still takes three seconds to finish. It's like a half dozen bytes
             Thread.sleep(3000); //Wait three seconds and hope the file write completes
             port = retrieve_lock_port();
         }
@@ -125,7 +140,7 @@ public class IPCLock implements AutoCloseable {
     
     //bind to localhost so that other machines can't connect.    
     ServerSocket open_service_port(int port) throws UnknownHostException, IOException{
-        var result = new ServerSocket(port, 0, InetAddress.getByAddress(local_ip_bytes));
+        var result = new ServerSocket(port, 50, InetAddress.getByAddress(local_ip_bytes));
         result.setReuseAddress(true);                
         return result;                
     }        
@@ -198,8 +213,10 @@ public class IPCLock implements AutoCloseable {
         //We either acquired the file at this point, or deterimned that the lock is stale
         try(var recovery_cleanup = recovery_lock){ //recovery lock may or may not be null
             m_service = new LockService();
+            m_service.start();
             try(var out = new PrintStream(path)){
                 out.println( m_service.port );
+                out.println("EOF");
             }
         }
         catch(Exception ex){
@@ -208,7 +225,8 @@ public class IPCLock implements AutoCloseable {
         }
     }
     
-    public IPCLock(File path) throws LockException, IOException, InterruptedException{        
+    public IPCLock(File path) throws LockException, IOException, InterruptedException{
+        m_path = path;
         setup_lock_impl(path);        
     }
 

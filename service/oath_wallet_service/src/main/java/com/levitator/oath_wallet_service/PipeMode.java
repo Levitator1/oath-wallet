@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service;
 
+import com.levitator.oath_wallet_service.messages.out.ErrorMessage;
 import java.io.Closeable;
 import java.io.EOFException;
 import java.nio.channels.SelectableChannel;
@@ -64,9 +65,9 @@ public class PipeMode {
     
     public PipeMode() throws FileNotFoundException, IOException{
         m_main_thread = Thread.currentThread();
-        var fifo_is = new FileInputStream(Config.instance.fifo_path.toFile());
-        var fifo_in = fifo_is.getChannel();
-        var fifo_out = new PrintStream(new FileOutputStream(Config.instance.fifo_path.toFile()));        
+        var fifo_out = new PrintStream(new FileOutputStream(Config.instance.fifo_in_path.toFile(), true));    
+        var fifo_is = new FileInputStream(Config.instance.fifo_out_path.toFile());
+        var fifo_in = fifo_is.getChannel();            
         
         //stdout_channel = Channels.readWriteSelectableChannel​(FileDescriptor.out, new IOCloser(null));                
         //fifo_out_channel = Channels.readWriteSelectableChannel(fifo_out.getFD(), new IOCloser(fifo_out_channel));
@@ -85,7 +86,7 @@ public class PipeMode {
         server_to_client = new InputState(fifo_in, fifo_in_channel, fifo_in_key, System.out);
     }                    
     
-    private void do_io(InputState state) throws IOException{
+    private void do_io(InputState state) throws EOFException, IOException{
         
         //state.channel.keyFor(selector).cancel();
         //state.channel.configureBlocking(true);
@@ -106,21 +107,39 @@ public class PipeMode {
         }
     }
     
-    private void io_loop() throws IOException{
-        while(true){
-            selector.select();
-            var keys = selector.selectedKeys();
-            
-            if(keys.contains(client_to_server.key))
-                do_io(client_to_server);
-            
-            if(keys.contains(server_to_client.key))
-                do_io(server_to_client);
+    private void io_loop() throws EOFException, IOException, LockException, InterruptedException{
+        try(var lock = new IPCLock(Config.instance.client_lock_path);){
+            while(true){
+                selector.select();
+                var keys = selector.selectedKeys();
+
+                if(keys.contains(client_to_server.key))
+                    do_io(client_to_server);
+
+                if(keys.contains(server_to_client.key))
+                    do_io(server_to_client);
+            }
+        }
+        catch(EOFException ex){
+            //I'm suprised that this has to be explicitly caught and rethrown
+            //I guess it's upcast to IOException otherwise
+            throw ex;
         }
     }
     
-    public void run() throws IOException{
-        io_loop();
+    public void run() throws IOException, LockException, InterruptedException{
+        try{
+            io_loop();    
+        }
+        catch( EOFException ex ){
+            //Consider EOF a normal exit for our purposes
+            Service.instance.log("Relay mode clean exit");
+        }
+        catch(LockException ex){
+            //One client at a time
+            var msg = new ErrorMessage("Busy. Sorry, try again.", 0);
+            Service.send_message(msg, System.out);
+        }
     } 
     
 }

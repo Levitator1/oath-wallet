@@ -21,13 +21,17 @@ public class Config {
     public final String pwd = System.getProperty("user.dir");
     public final String app_name = "oath-wallet";
     public final String app_version = "v0.1";
-    public final String app_title = app_name + " " + app_version;
-    
+    public final String app_title = app_name + " " + app_version;    
+        
     //Suitable for a Linux-style environment. Windows users will want something else.
     //TODO: Support Windows
     public final Path config_dir = CrossPlatform.get_os_user_config_dir().resolve(".oath_wallet");
+    public final File service_lock_path = config_dir.resolve("service_lockfile").toFile();
+    public final File client_lock_path = config_dir.resolve("client_lockfile").toFile();
+    
     public final Path ykman_path = Path.of(CrossPlatform.auto_detect_command_path("ykman"));
-    public final Path fifo_path = config_dir.resolve("fifo");
+    public final Path fifo_in_path = config_dir.resolve("fifo_in");     //Named from the service's perspective
+    public final Path fifo_out_path = config_dir.resolve("fifo_out");
     public final String package_dir = "/com/levitator/oath_wallet_service/";
     public final String resource_dir = package_dir + "resources/";
     public final String fxml_dir = resource_dir + "fxml/";
@@ -50,7 +54,7 @@ public class Config {
         g2.fill3DRect(0, 0, 50, 50, false);
         return img;
     }
-    
+        
     //Retrieve an icon by pathname, or if it is not found, then return a generated placeholder image
     private Image get_image( String path ){        
         try{            

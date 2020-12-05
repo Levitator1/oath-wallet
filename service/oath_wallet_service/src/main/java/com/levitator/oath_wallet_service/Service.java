@@ -11,19 +11,26 @@ import javafx.application.Platform;
 import javafx.scene.text.Font;
 import javax.swing.JOptionPane;
 import com.levitator.oath_wallet_service.messages.common.MessageFactory;
+import com.levitator.oath_wallet_service.messages.common.TypedMessage;
+import com.levitator.oath_wallet_service.messages.in.HiHowAreYou;
 import com.levitator.oath_wallet_service.messages.in.InMessage;
 import com.levitator.oath_wallet_service.messages.in.PINRequest;
 import com.levitator.oath_wallet_service.messages.in.QuitMessage;
 import com.levitator.oath_wallet_service.messages.out.ErrorMessage;
+import com.levitator.oath_wallet_service.messages.out.Notification;
 import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
 import com.levitator.oath_wallet_service.util.NioFileInputStream;
 import com.levitator.oath_wallet_service.util.NioFileOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.nio.channels.ClosedByInterruptException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import javax.json.Json;
 import javax.json.JsonException;
 import javax.json.stream.JsonParser;
@@ -49,9 +56,11 @@ public class Service{
     }
     
     static class MessageRegister{
+        
+        
         MessageRegister(){
-            MessageFactory.instance().add("pin_request", PINRequest.class);
-            MessageFactory.instance().add("quit", QuitMessage.class);
+            var classes = List.of(HiHowAreYou.class, PINRequest.class, QuitMessage.class);
+            MessageFactory.instance().add( classes );                        
         }
     }
     
@@ -84,17 +93,34 @@ public class Service{
         send_to_client(packet);
     }
     
-    private void process_message() throws InterruptedException, Exception{
-        
+    public void notice_to_client(String message, long session) throws IOException{
+        var packet = new Notification(message, session);
+        send_to_client(packet);
+    }
+    
+    private void require_parse_next() throws GeneralInterruptException, IOException{
         if( !m_parser.hasNext() ){
-            log("Client disconnect");
+            log("Warning: client disconnected unexpectedly");
             reset_io();
         }
-            
-        if(m_parser.next() != Event.START_OBJECT)
-            throw new JsonParsingException ("Expected start of JSON object", m_parser.getLocation());
+    }
+    
+    private void process_message() throws InterruptedException, Exception{
         
-        var obj = (InMessage)MessageFactory.instance().create(m_parser);              
+        require_parse_next(); //Demand that there be a next json element
+        var next = m_parser.next();
+        if(next == Event.END_ARRAY){ //It can be an array end
+            log("Client disconnect");
+            reset_io();
+            return;
+        }        
+        
+        if(next != Event.START_OBJECT) //or an object start
+            throw new JsonParsingException ("Expected start of JSON object", m_parser.getLocation());                
+        
+        //Failing this exits the program, but maybe that's a failsafe thing to do
+        //if someone is sending unintelligible messages (in this case with bad type() strings)
+        var obj = (InMessage)MessageFactory.instance().create(m_parser);        
         obj.process(this);        
     }
     
@@ -119,10 +145,12 @@ public class Service{
         check_interrupt();
         //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
         //NIO is supposed to be fully interruptible, but I guess Open JDK didn't account for the one-sided fifo case
-        m_in_stream = new NioFileInputStream(Config.instance.fifo_path.toFile());
-        m_out_stream = new NioFileOutputStream(Config.instance.fifo_path.toFile());
+        //Also, the two fifo opens have to be in the same order (client/server), or the operation will probably deadlock
+        m_in_stream = new NioFileInputStream(Config.instance.fifo_in_path.toFile());
+        m_out_stream = new NioFileOutputStream(Config.instance.fifo_out_path.toFile());
         check_interrupt();
         m_parser = Json.createParser(m_in_stream);        
+        
         
         //We will treat the incoming connection as a streaming array of json objects
         //Because if you complete a top-level object, the parser expects to see EOF immediately
@@ -130,32 +158,44 @@ public class Service{
             throw new JsonParsingException("Service input must be at an object array at the top level", m_parser.getLocation());        
     }
     
+    //We need the same fat error handler twice, so here is a lamba for those function bodies
+    @FunctionalInterface
+    static interface MessageHandlingTask{
+        public void run() throws GeneralInterruptException, InterruptedException, Exception;
+    }
+    
+    private void message_loop_error_handler(MessageHandlingTask f) throws GeneralInterruptException, IOException{
+        try{
+                f.run();
+        }
+        catch(JsonException ex){
+            //Ok, so because we hacked together an interruptible NIO-based implemention of the streams, as a result, some Json
+            //errors are due to interrupts, but we have to search the cause chain to find out which, so that we
+            //can exit cleanly for those instead of logging or reporting them as errors
+            ClosedByInterruptException cause = Util.search_causes(ClosedByInterruptException.class, ex);
+            if( cause != null)
+                throw new GeneralInterruptException(cause); //clean exit
+            else
+                reset_io();
+        }
+        catch(InterruptedException ex){
+            throw new GeneralInterruptException(ex); //clean exit
+        }
+        catch(Exception ex){
+            //Report an unexpected error, which we recover from by resetting the IO state
+            log("Error processing service IO", null, ex);
+            reset_io();
+        }
+    }
+    
     private void message_loop() throws GeneralInterruptException, FileNotFoundException, IOException{                                   
 
-        reset_io();
+        message_loop_error_handler( ()->{ reset_io(); } );
         
         set_status_text("Status: READY");
         
         while(Main.exit_code() == null){
-            try{
-                process_message();
-            }
-            catch(JsonException ex){
-                //Ok, so because we hacked together an interruptible NIO-based implemention of the streams, as a result, some Json
-                //errors are due to interrupts, but we have to search the cause chain to find out which, so that we
-                //can exit cleanly for those instead of logging or reporting them as errors
-                ClosedByInterruptException cause = Util.search_causes(ClosedByInterruptException.class, ex);
-                if( cause != null)
-                    throw new GeneralInterruptException(cause); //clean exit
-            }
-            catch(InterruptedException ex){
-                throw new GeneralInterruptException(ex); //clean exit
-            }
-            catch(Exception ex){
-                //Report an unexpected error, which we recover from by resetting the IO state
-                log("Error processing service IO", null, ex);
-                reset_io();
-            }
+           message_loop_error_handler( ()->{ process_message(); } );
         }
         
         //We don't need to be interrupted anymore because we are awake and exiting
@@ -200,21 +240,17 @@ public class Service{
         m_gui = FXApp.last_app_started();
                        
         //Now we are free to do background stuff on a thread independent of the GUI
+        log("");
         var text = Config.instance.app_title + " " + "started";        
         log(text, Config.instance.console_bold_font);
         log(IntStream.range(0, text.length()).mapToObj(i -> "=").collect(Collectors.joining("")), Config.instance.console_bold_font);
         log("" + m_mapper.mappings().size() + " credential entries loaded from: " + Config.instance.domain_config);
-                       
+        log("");
+        
         try{
-            //Create the FIFO for client instances to talk to us (the server/gui instance)
-            if( !Config.instance.fifo_path.toFile().exists() ){
-                var result = CrossPlatform.mkfifo( Config.instance.fifo_path );
-                if(result != 0){
-                    log("\"Unable to create IPC fifo: '\" + Config.instance.fifo_path + \"' Result code: \" + result");
-                    log("If you are running Linux or an operating system that permits it, you should be able to create this fifo manually and try again.");
-                    throw new RuntimeException("Failed creating FIFO");
-                }
-            }
+            //Create the FIFOs for client instances to talk to us (the server/gui instance)            
+            mkfifo( Config.instance.fifo_in_path );
+            mkfifo( Config.instance.fifo_out_path );
             
             message_loop();            
         }
@@ -229,6 +265,17 @@ public class Service{
             return;
         }
         log("Program exiting normally");
+    }
+    
+    private void mkfifo(Path path) throws IOException, InterruptedException{
+        if( !path.toFile().exists() ){                         
+            var result = CrossPlatform.mkfifo( path );
+            if(result != 0){
+                log("\"Unable to create IPC fifo: '\" + Config.instance.fifo_path + \"' Result code: \" + result");
+                log("If you are running Linux or an operating system that permits it, you should be able to create this fifo manually and try again.");
+                throw new RuntimeException("Failed creating FIFO");
+            }
+        }
     }
     
     private void gui_shutdown(){
@@ -332,10 +379,10 @@ public class Service{
         //Everything below is dedicated to unblocking the main thread so that
         //it notices it's time to exit                
         
-        //Open the FIFO for writing as if a client were connected because otherwise
-        //our own serve-side open operation may be non-interruptibly blocked waiting for a connection
+        //Open the FIFOs as if a client were connected because otherwise
+        //our own server-side open operation may be non-interruptibly blocked waiting for a connection
         try{
-            try(var out = new FileOutputStream(Config.instance.fifo_path.toFile())){}
+            try(var out = new FileOutputStream(Config.instance.fifo_in_path.toFile()); var in = new FileInputStream(Config.instance.fifo_out_path.toFile())){}
             //m_in_stream.close();
             service_thread.interrupt();            
         }
