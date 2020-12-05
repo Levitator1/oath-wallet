@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.function.Consumer;
 
 public class Util {
     
@@ -68,5 +69,19 @@ public class Util {
                 return (E)t;
         }            
         return null;
-    }     
+    }
+    
+    //Run a lambda submitting any exception to handler
+    //E is the exception base that f.accept() is declared to throw
+    //E2 is the throws specification for the handler, in case it wants to rethrow an exception
+    static public <E extends Exception, E2 extends Exception> void with_handler( ThrowingAction<E> f, ThrowingConsumer<Exception, E2> handler ) throws E2{
+        try{
+            f.run();
+        }
+        catch(Exception ex){
+            if(handler != null)
+                handler.accept(ex);
+        }
+    }
+    
 }

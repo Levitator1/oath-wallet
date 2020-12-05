@@ -22,11 +22,15 @@ import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
 import com.levitator.oath_wallet_service.util.NioFileInputStream;
 import com.levitator.oath_wallet_service.util.NioFileOutputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.StringWriter;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -47,8 +51,8 @@ public class Service{
     private Thread service_thread;
 
     //Message loop stuff
-    NioFileInputStream m_in_stream;
-    NioFileOutputStream m_out_stream;
+    InputStreamReader m_in_stream;
+    OutputStreamWriter m_out_stream;
     JsonParser m_parser;    
 
     public DomainMapper mapper() {
@@ -71,16 +75,16 @@ public class Service{
         service_thread = Thread.currentThread();
     }        
     
-    static public void send_message( OutMessage msg, OutputStream out) throws IOException{
+    static public void send_message( OutMessage msg, OutputStreamWriter out) throws IOException{
         
         //Looks like we have to buffer these objects one at a time because a given parser
         //seems to expect a single document root
-       var bufstream = new ByteArrayOutputStream();
+       var bufstream = new StringWriter();
        var writer = Json.createWriter(bufstream);        
        writer.write(msg.toJson().build());
        writer.close();
-       bufstream.writeTo(out);
-       out.write('\n'); //Makes the protocol a bit easier to raed
+       //bufstream.writeTo(out);
+       out.write(bufstream.toString() + '\n');       
        out.flush();
     }
     
@@ -124,7 +128,7 @@ public class Service{
         obj.process(this);        
     }
     
-    private void check_interrupt() throws GeneralInterruptException{
+    static private void check_interrupt() throws GeneralInterruptException{
         if(Thread.interrupted())
             throw new GeneralInterruptException(new InterruptedException());
     }
@@ -146,11 +150,34 @@ public class Service{
         //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
         //NIO is supposed to be fully interruptible, but I guess Open JDK didn't account for the one-sided fifo case
         //Also, the two fifo opens have to be in the same order (client/server), or the operation will probably deadlock
-        m_in_stream = new NioFileInputStream(Config.instance.fifo_in_path.toFile());
-        m_out_stream = new NioFileOutputStream(Config.instance.fifo_out_path.toFile());
+        m_in_stream = new InputStreamReader(new NioFileInputStream(Config.instance.fifo_in_path.toFile()));
+        m_out_stream = new OutputStreamWriter(new NioFileOutputStream(Config.instance.fifo_out_path.toFile()));
         check_interrupt();
-        m_parser = Json.createParser(m_in_stream);        
         
+        //The interface from the browser is supposed to be json, but it seems like it adds a single header character to
+        //each message. It seems to be "!" for the first mesage in the stream, and "Y" for subsequent messages. If this turns
+        //out to be unreliable or inconsistent, whether in future versions, or if adding additional browser support, then we
+        //will probably need to make NioFileInputStream support mark() and reset() so that we can push characters back after
+        //testing them to discern what the browser is doing.
+        int ch;
+        do{
+            ch = m_in_stream.read();
+            if(ch == '[' || ch == '{'){
+                log("ERROR: Was expecting Mozilla protocol to include single-character prefix. Parsing fails.");
+                throw new JsonParsingException("Expected Mozilla message prefix ('!'/'Y')", null);
+            }
+        }while( ch != '!' && ch != 'Y' );
+                
+        
+//        try(var in = new InputStreamReader(m_in_stream)){
+//            var ch = in.read();
+//            
+//            if(ch != '!' && ch != 'Y'){
+//                log("ERROR: Was expecting Mozilla protocol to include single-character prefix. Communication will probably fail.");
+//            }                
+//        }
+        
+        m_parser = Json.createParser(m_in_stream);        
         
         //We will treat the incoming connection as a streaming array of json objects
         //Because if you complete a top-level object, the parser expects to see EOF immediately
@@ -175,15 +202,17 @@ public class Service{
             ClosedByInterruptException cause = Util.search_causes(ClosedByInterruptException.class, ex);
             if( cause != null)
                 throw new GeneralInterruptException(cause); //clean exit
-            else
+            else{
+                log("json parse error. Resetting connection.", null, ex);
                 reset_io();
+            }
         }
         catch(InterruptedException ex){
             throw new GeneralInterruptException(ex); //clean exit
         }
         catch(Exception ex){
             //Report an unexpected error, which we recover from by resetting the IO state
-            log("Error processing service IO", null, ex);
+            log("Unexpected error processing service IO", null, ex);
             reset_io();
         }
     }
@@ -224,7 +253,7 @@ public class Service{
             log("Existing instance detected. Running in relay mode.");
             try{
                 var pipe_mode = new PipeMode();
-                pipe_mode.run();
+                pipe_mode.same_thread_run();
             }
             catch(Exception ex){
                 log("IO error", null, ex);                
@@ -247,12 +276,25 @@ public class Service{
         log("" + m_mapper.mappings().size() + " credential entries loaded from: " + Config.instance.domain_config);
         log("");
         
+        /*
+        var pipe_mode_thread = new Thread( ()->{ 
+            var pipe_mode = new PipeMode();
+            pipe_mode.run();
+        });
+        */
+        
         try{
             //Create the FIFOs for client instances to talk to us (the server/gui instance)            
             mkfifo( Config.instance.fifo_in_path );
             mkfifo( Config.instance.fifo_out_path );
             
-            message_loop();            
+            //Create a relay thread to handle the first communication session
+            //This allows the stdio interface to be the same regardless of whether this instance
+            //is the first, or a subsequent client instance
+            try(var initial_relay = new PipeMode()){
+                initial_relay.start();
+                message_loop();            
+            }
         }
         catch(GeneralInterruptException ex){
             if(Main.exit_code() == null){

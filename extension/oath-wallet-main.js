@@ -3,18 +3,23 @@
 var extension_id = "oath-wallet@Levitat0r";
 var extension_name = "oath-wallet";
 var pin_service_name = "oath-wallet-service";
+var extension_title = "OATH Wallet";
 
-console.log("OATH Wallet started" );
+console.log(extension_title + " Started" );
 
-function notify(title, message){
-	browser.notifications.create({
-		"type": "basic",
-		"title": title,
-		"message": message
-	});
+function notify2(title, message){
+    browser.notifications.create({
+            "type": "basic",
+            "title": title,
+            "message": message
+    });
 }
 
-notify("More Initialization Woots", "MORE WOOTS");
+function notify(message){
+    notify2(extension_title, message);
+}
+
+notify("MORE WOOTS");
 
 function fetch_pin_command_failure(message){
 	notify("Unexpected error retrieving active browser window: " + message);
@@ -23,7 +28,7 @@ function fetch_pin_command_failure(message){
 function fetch_pin_for_window(window){
 	var tab = browser.tabs.getCurrent();
 	console.log(JSON.stringify(window));
-	notify("DEBUG", "The window location is: " + tab.url);
+	notify2("DEBUG", "The window location is: " + tab.url);
 }
 
 function fetch_pin_for_tab(tab){
@@ -37,7 +42,7 @@ function do_throw(err){
 
 function show_error(err){
 	var msg = "Unexpected error fetching PIN: " + err;
-	notify("OATH Wallet Error", msg);
+	notify2(extension_title + err, msg);
 	console.log(msg);
 }
 
@@ -56,15 +61,6 @@ var pin_probe_script = `
 	browser.runtime.sendMessage( extension_id, { type: "pin-request", url: location }, {} );
 	console.log("Sent OATH Wallet PIN request to extension");
 `
-
-//Have to remember from which tab and url we are anticipating a reply to keep
-//evildoers from spoofing replies
-class PinRequest {
-	constructor( tab_in ){
-		this.tab = tab_in;
-		this.url = tab_in.url;
-	}
-}
 
 var pin_request_state = null;
 
@@ -94,25 +90,25 @@ function validate_browser_sender( sender ){
 
 function handleMessage(message, sender, response_f){
 
-	//debugger;
+    //debugger;
 
-	//Validate sender. Log jiggerypokery.
-	var result = validate_browser_sender(sender);
-	if(!result){
-		console.log( "Dropped spurious (suspicious) message from: '" + sender.url);
-		return;
-	}
+    //Validate sender. Log jiggerypokery.
+    var result = validate_browser_sender(sender);
+    if(!result){
+        console.log( "Dropped spurious (suspicious) message from: '" + sender.url);
+        return;
+    }
 
-	if(message.type == "namespace-check"){
-		if( message.value ){
-			notify(`${oath-wallet} ERROR`, "This web page contains script definitions that conflict with our functionality, so we cannot proceed. Also, this is strange and probably should not happen.");
-			pin_request_state = null;
-			return;
-		}
-		else{
-			notify("EXTRA WOOTS", "WOOTS are plentiful");
-		}
-	}
+    if(message.type == "namespace-check"){
+        if( message.value ){
+            notify(`${oath-wallet} ERROR`, "This web page contains script definitions that conflict with our functionality, so we cannot proceed. Also, this is strange and probably should not happen.");
+            pin_request_state = null;
+            return;
+        }
+        else{
+            notify("EXTRA WOOTS", "WOOTS are plentiful");
+        }
+    }
 }
 
 
@@ -152,24 +148,84 @@ async function browser_command_handler (command) {
   }
 }
 
+//Back-end related items
 var backend = null;
 
-function connect_to_backend(){
-    backend = browser.runtime.connectNative('com.levitator.oath_wallet_service');
-    debugger;
-    backend.onMessage.addListener( function(msg) {
-        console.log("Received" + msg);
-    });
+//Message definitions
+class HelloMessage{
+    type="hello";
+    session_id=0;
+}
+
+class PinRequest{
+    type="pin_request";
+    session_id=null;
+    url=null
     
-    backend.onDisconnect.addListener(function() {
-        console.log("Disconnected");
-    });
+    constructor(session, url){
+        this.session_id = session;
+        this.url = url;
+    }    
+}
+
+class Backend{
+    port=null;
+    disconnect_resolvers = [];
+    connected=false;
+            
+    connect = () => {        
+        this.port = browser.runtime.connectNative('com.levitator.oath_wallet_service');
+        this.connected = this.port.error === null || this.port.error.length === 0;
+        if(this.connected){
+            this.port.onMessage.addListener( this.handle_backend_message );    
+            this.port.onDisconnect.addListener( this.handle_backend_disconnect );
+        }
+        else
+            throw this.port.error;
+    }
+    
+    send_message = async (msg) => {
+        if(!this.connected)
+            this.connect();
+        
+        if(Array.isArray(msg))
+            this.port.postMessage(msg);
+        else
+            this.port.postMessage( [ msg ] );
+        
+        await this.disconnect_promise();
+    }
+    
+    disconnect_promise = ()=>{
+        return new Promise((resolve, reject)=>{ this.disconnect_resolvers.push(resolve); });                
+    }
+    
+    handle_backend_message = (msg) => {
+        notify("BREAKING NEWS: " + JSON.stringify(msg));
+    }
+    
+    handle_backend_disconnect = () => {
+        notify("DISCONNECT");
+        this.connected=false;
+        this.disconnect_resolvers.forEach( (r)=>{ r(null); });
+        this.disconnect_resolvers = [];
+    }
 }
 
 // Main
-connect_to_backend();
+var backend = null;
+try{
+    debugger;
+    backend = new Backend();
+    //backend.send_message(new HelloMessage());
+}
+catch(ex){
+    notify("Failed connecting to back-end service. The extension may not be installed properly.");
+}
 
-//backend.postMessage({ text: "Hello, my_application" });
+backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") ).then( ()=>{
+    backend.send_message( new PinRequest(321, "https://www.facebook.com/blah/blah/blah") );
+});
 
 browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
 //browser.runtime.onMessage.addListener(handleMessage);
