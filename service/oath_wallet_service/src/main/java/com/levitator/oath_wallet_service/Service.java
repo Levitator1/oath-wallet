@@ -125,7 +125,7 @@ public class Service{
         m_parser = Json.createParser(m_in_stream);        
         
         //We will treat the incoming connection as a streaming array of json objects
-        //Because if you read a top-level object, the parser expects to see EOF immediately
+        //Because if you complete a top-level object, the parser expects to see EOF immediately
         if(m_parser.next() != Event.START_ARRAY)
             throw new JsonParsingException("Service input must be at an object array at the top level", m_parser.getLocation());        
     }
@@ -167,7 +167,7 @@ public class Service{
         try{
             m_mapper = new DomainMapper();            
         }        
-        catch( ConfigLockedException ex ){
+        catch( LockException ex ){
             m_mapper = null;            
         }
         catch( Exception ex){

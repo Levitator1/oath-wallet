@@ -24,17 +24,18 @@ public class DomainMapper implements AutoCloseable{
     private FileOutputStream map_file_ostream; //Has to be an output stream to provide an exclusive lock
     private FileChannel map_file_channel;
     private FileLock map_file_lock;
+    //IPCLock m_lock;
     
     private DomainMappingConfig config;
     
-    public DomainMapper() throws FileNotFoundException, IOException, ConfigLockedException{
+    public DomainMapper() throws FileNotFoundException, IOException, LockException{
         
         //Acquire an exclusive file lock. We don't actually write with this stream. It's just to hold the lock.
         map_file_ostream = new FileOutputStream(Config.instance.domain_config, true);
         map_file_channel = map_file_ostream.getChannel();
         map_file_lock = map_file_channel.tryLock();
         if(map_file_lock == null)
-            throw new ConfigLockedException();
+            throw new LockException();
         
         Pair<FileInputStream, JsonParser> data;
         try{
@@ -63,7 +64,8 @@ public class DomainMapper implements AutoCloseable{
     public void save() throws FileNotFoundException, IOException{
         
         var tmp = new File(Config.instance.domain_config.toString() + ".tmp");        
-        var old = new File( Config.instance.domain_config.toString() + ".old" );                
+        var old = new File( Config.instance.domain_config.toString() + ".old" );
+        
         var tmp_stream = new FileOutputStream(tmp);
         var tmp_stream_lock = tmp_stream.getChannel().lock();
                 
