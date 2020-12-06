@@ -36,6 +36,8 @@ import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Path;
 import java.util.List;
@@ -89,16 +91,13 @@ public class Service{
        writer.write(msg.toJson().build());
        writer.close();
        
-       //Stupid undocumented MDN crap
-       try(var myintbytes = new ByteArrayOutputStream(); var dos = new DataOutputStream(myintbytes)){
-           dos.writeInt(bufstream.size());
-           dos.close();
-           out.write(myintbytes.toByteArray());
-       }              
-       bufstream.writeTo(out);
-       //out.write(bufstream.toString() + '\n');
-       //out.write('\n');
-       out.flush();
+        //Stupid undocumented MDN crap
+        final ByteBuffer buf = ByteBuffer.wrap(new byte[4]);
+        buf.order(ByteOrder.nativeOrder());
+        buf.putInt(bufstream.size());
+        out.write( buf.array() );      
+        bufstream.writeTo(out);                
+        out.flush();
     }
     
     public void send_to_client(OutMessage msg) throws IOException{
@@ -183,16 +182,17 @@ public class Service{
         check_interrupt();
         
         //Looks like each message from the browser is a Pascal string with a 4-byte header representing the string length
-        //in big endian. It would be nice if the MDN manuals mentioned that. Maybe it turns out to be a lucky thing since
-        //the json parser seems to be hanging reading off the end of the available data.
-        int strlen;
-        try(var dis = new DataInputStream(m_in_stream)){
-            strlen = dis.readInt();
-        }
+        //in little endian... so, machine byte order?. It would be nice if the MDN manuals mentioned that. Maybe it turns
+        //out to be a lucky thing since the json parser seems to be hanging reading off the end of the available data.
+        var lenbytes = ByteBuffer.wrap( new byte[4] );
+        lenbytes.order(ByteOrder.nativeOrder());
+        m_in_stream.read(lenbytes.array(), lenbytes.arrayOffset(), 4);
+        var strlen = lenbytes.getInt();
+        
         
         byte[] buf = new byte[strlen];
         m_in_stream.read(buf);
-        m_current_message = new ByteArrayInputStream(buf);
+        var current_message = new ByteArrayInputStream(buf);
         
 //        try(var in = new InputStreamReader(m_in_stream)){
 //            var ch = in.read();
@@ -202,7 +202,7 @@ public class Service{
 //            }                
 //        }
         
-        m_parser = Json.createParser(m_in_stream);        
+        m_parser = Json.createParser(current_message);        
         
         //We will treat the incoming connection as a streaming array of json objects
         //Because if you complete a top-level object, the parser expects to see EOF immediately
