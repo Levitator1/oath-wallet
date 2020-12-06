@@ -22,12 +22,18 @@ import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
 import com.levitator.oath_wallet_service.util.NioFileInputStream;
 import com.levitator.oath_wallet_service.util.NioFileOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.InterruptedIOException;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.nio.channels.ClosedByInterruptException;
@@ -49,8 +55,8 @@ public class Service{
     private Thread service_thread;
 
     //Message loop stuff
-    InputStreamReader m_in_stream;
-    OutputStreamWriter m_out_stream;
+    InputStream m_in_stream;
+    OutputStream m_out_stream;
     JsonParser m_parser;    
 
     public DomainMapper mapper() {
@@ -73,16 +79,25 @@ public class Service{
         service_thread = Thread.currentThread();
     }        
     
-    static public void send_message( OutMessage msg, OutputStreamWriter out) throws IOException{
+    static public void send_message( OutMessage msg, OutputStream out) throws IOException{
         
         //Looks like we have to buffer these objects one at a time because a given parser
         //seems to expect a single document root
-       var bufstream = new StringWriter();
-       var writer = Json.createWriter(bufstream);        
+       //var bufstream = new StringWriter();
+       var bufstream = new ByteArrayOutputStream();                     
+       var writer = Json.createWriter(bufstream);      
        writer.write(msg.toJson().build());
        writer.close();
-       //bufstream.writeTo(out);
-       out.write(bufstream.toString() + '\n');       
+       
+       //Stupid undocumented MDN crap
+       try(var myintbytes = new ByteArrayOutputStream(); var dos = new DataOutputStream(myintbytes)){
+           dos.writeInt(bufstream.size());
+           dos.close();
+           out.write(myintbytes.toByteArray());
+       }              
+       bufstream.writeTo(out);
+       //out.write(bufstream.toString() + '\n');
+       //out.write('\n');
        out.flush();
     }
     
@@ -163,27 +178,21 @@ public class Service{
         //other end never sees the disconnect. We mitigate this by implementing a "Bye" message which represents a
         //request for the browser to disconnect on its end, thus making connection termination explicit and better-defined.
         Thread.sleep(1000);
-        m_in_stream = new InputStreamReader(new NioFileInputStream(Config.instance.fifo_in_path.toFile()));
-        m_out_stream = new OutputStreamWriter(new NioFileOutputStream(Config.instance.fifo_out_path.toFile()));
+        m_in_stream = new NioFileInputStream(Config.instance.fifo_in_path.toFile());
+        m_out_stream = new NioFileOutputStream(Config.instance.fifo_out_path.toFile());
         check_interrupt();
         
-        //The interface from the browser is supposed to be json, but it seems like it adds a single header character to
-        //each message. It seems to be "!" for the first mesage in the stream, and "Y" for subsequent messages. If this turns
-        //out to be unreliable or inconsistent, whether in future versions, or if adding additional browser support, then we
-        //will probably need to make NioFileInputStream support mark() and reset() so that we can push characters back after
-        //testing them to discern what the browser is doing.
-        int ch;
-        do{
-            ch = m_in_stream.read();
-            if(ch < 0)
-                throw new CleanEOF("EOF looking for start of message");
-            
-            if(ch == '[' || ch == '{'){
-                log("ERROR: Was expecting Mozilla protocol to include single-character prefix. Parsing fails.");
-                throw new JsonParsingException("Expected Mozilla message prefix ('!'/'Y')", null);
-            }
-        }while( ch != '!' && ch != 'Y' );
-                
+        //Looks like each message from the browser is a Pascal string with a 4-byte header representing the string length
+        //in big endian. It would be nice if the MDN manuals mentioned that. Maybe it turns out to be a lucky thing since
+        //the json parser seems to be hanging reading off the end of the available data.
+        int strlen;
+        try(var dis = new DataInputStream(m_in_stream)){
+            strlen = dis.readInt();
+        }
+        
+        byte[] buf = new byte[strlen];
+        m_in_stream.read(buf);
+        m_current_message = new ByteArrayInputStream(buf);
         
 //        try(var in = new InputStreamReader(m_in_stream)){
 //            var ch = in.read();

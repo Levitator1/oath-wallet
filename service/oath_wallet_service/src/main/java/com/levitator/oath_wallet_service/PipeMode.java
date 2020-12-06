@@ -150,6 +150,13 @@ public class PipeMode extends Thread implements AutoCloseable{
     
     private void io_loop() throws EOFException, IOException, LockException, InterruptedException{
         try(var lock = new IPCLock(Config.instance.client_lock_path);){
+            
+            boolean DEBUG = true;
+            
+            while(!DEBUG){
+                Thread.sleep(1000);
+            }
+            
             while(true){
                 selector.select();
                 var keys = selector.selectedKeys();
@@ -204,7 +211,7 @@ public class PipeMode extends Thread implements AutoCloseable{
         catch(LockException ex){
             //One client at a time
             var msg = new ErrorMessage("Connection busy. Sorry, try again.", 0);
-            Service.send_message(msg, new OutputStreamWriter(System.out));
+            Service.send_message(msg, System.out);
         }
         catch(IOException ex){
             Service.instance.log("Connection relay closing for IO error");

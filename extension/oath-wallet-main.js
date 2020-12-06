@@ -123,7 +123,7 @@ async function get_active_tab(){
 
 	return tabs[0];
 }
-
+/*
 async function fetch_pin_command(){
 
 	//PIN request function is not reentrant. One request at a time, plz.
@@ -135,6 +135,7 @@ async function fetch_pin_command(){
 	tab = await get_active_tab();
 	console.log("Processing PIN request for site: " + tab.url);
 }
+ */
 
 async function browser_command_handler (command) {
   try{
@@ -173,7 +174,8 @@ class Backend{
     disconnect_resolvers = [];
     connected=false;
             
-    connect = () => {        
+    connect = () => {
+        debugger;
         this.port = browser.runtime.connectNative('com.levitator.oath_wallet_service');
         this.connected = this.port.error === null || this.port.error.length === 0;
         if(this.connected){
@@ -215,7 +217,7 @@ class Backend{
 // Main
 var backend = null;
 try{
-    debugger;
+    //debugger;
     backend = new Backend();
     //backend.send_message(new HelloMessage());
 }
@@ -223,9 +225,13 @@ catch(ex){
     notify("Failed connecting to back-end service. The extension may not be installed properly.");
 }
 
-backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") ).then( ()=>{
-    backend.send_message( new PinRequest(321, "https://www.facebook.com/blah/blah/blah") );
-});
+//backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") ).then( ()=>{
+//    backend.send_message( new PinRequest(321, "https://www.facebook.com/blah/blah/blah") );
+//});
+
+function fetch_pin_command(){
+    backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") );
+}
 
 browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
 //browser.runtime.onMessage.addListener(handleMessage);
