@@ -10,33 +10,20 @@ import javax.json.stream.JsonParser;
 * which, for our purposes with Firefox, means the unique identifier which identifies a browsing tab
 *
 */
-public abstract class SessionMessage implements TypedMessage {
-        
-    private long m_session_id;        
+public interface SessionMessage extends TypedMessage {
+                
+    public long session_id();
+    public void session_id(long v);
     
-    public SessionMessage(){
-        m_session_id = 0;
-    }
-    
-    public SessionMessage(long id){
-        m_session_id = id;
-    }
-    
-    public long session_id(){
-        return m_session_id;
-    }
-    
-    //public String type();
-
     @Override
-    public JsonObjectBuilder toJson(){
+    public default JsonObjectBuilder toJson(){
         var builder = TypedMessage.super.toJson();
         builder.add("session_id", session_id());
         return builder;
     }
     
     @Override
-    public void parse(JsonParser parser) {
-        m_session_id = Parser.demand_long_named(parser, "session_id");
+    public default void parse(JsonParser parser) {
+        session_id(Parser.demand_long_named(parser, "session_id"));
     }
 }

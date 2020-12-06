@@ -3,7 +3,7 @@ package com.levitator.oath_wallet_service.messages.out;
 import javax.json.JsonObjectBuilder;
 
 
-public class PINReply extends OutMessage{
+public class PINReply extends OutMessageBase{
 
     String m_url, m_cred, m_pin;
     

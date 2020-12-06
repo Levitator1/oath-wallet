@@ -2,7 +2,7 @@ package com.levitator.oath_wallet_service.messages.out;
 
 import javax.json.JsonObjectBuilder;
 
-public class Notification extends OutMessage{
+public class Notification extends OutMessageBase{
         private String m_message;
     
     public Notification(String msg, long session){

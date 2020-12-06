@@ -1,4 +1,5 @@
 package com.levitator.oath_wallet_service;
+import java.io.InterruptedIOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileLockInterruptionException;
 
@@ -15,6 +16,10 @@ public class GeneralInterruptException extends Exception {
     }
     
     public GeneralInterruptException(ClosedByInterruptException ex){
+        super("Interrupted", ex);
+    }
+    
+    public GeneralInterruptException( InterruptedIOException ex ){
         super("Interrupted", ex);
     }
     

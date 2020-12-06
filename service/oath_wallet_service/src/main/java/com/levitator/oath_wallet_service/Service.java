@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service;
 
+import com.levitator.oath_wallet_service.messages.out.Bye;
 import com.levitator.oath_wallet_service.ui.jfx.FXApp;
 import com.levitator.oath_wallet_service.util.Util;
 import java.io.IOException;
@@ -11,7 +12,6 @@ import javafx.application.Platform;
 import javafx.scene.text.Font;
 import javax.swing.JOptionPane;
 import com.levitator.oath_wallet_service.messages.common.MessageFactory;
-import com.levitator.oath_wallet_service.messages.common.TypedMessage;
 import com.levitator.oath_wallet_service.messages.in.HiHowAreYou;
 import com.levitator.oath_wallet_service.messages.in.InMessage;
 import com.levitator.oath_wallet_service.messages.in.PINRequest;
@@ -22,18 +22,16 @@ import com.levitator.oath_wallet_service.messages.out.OutMessage;
 import com.levitator.oath_wallet_service.util.CrossPlatform;
 import com.levitator.oath_wallet_service.util.NioFileInputStream;
 import com.levitator.oath_wallet_service.util.NioFileOutputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import javax.json.Json;
 import javax.json.JsonException;
@@ -63,7 +61,7 @@ public class Service{
         
         
         MessageRegister(){
-            var classes = List.of(HiHowAreYou.class, PINRequest.class, QuitMessage.class);
+            var classes = List.of(HiHowAreYou.class, PINRequest.class, QuitMessage.class, Bye.class);
             MessageFactory.instance().add( classes );                        
         }
     }
@@ -102,20 +100,22 @@ public class Service{
         send_to_client(packet);
     }
     
-    private void require_parse_next() throws GeneralInterruptException, IOException{
+    //Used to find the next element in the message array, whether it's an object or array close
+    private void require_parse_next() throws GeneralInterruptException, IOException, EOFException{
         if( !m_parser.hasNext() ){
             log("Warning: client disconnected unexpectedly");
-            reset_io();
+            //reset_io(); //Excessive complexity. Throw an error and iterate from the beginning
+            throw new EOFException("EOF before message array close");
         }
     }
     
-    private void process_message() throws InterruptedException, Exception{
+    private void process_message() throws InterruptedException, EOFException, GeneralInterruptException, CleanEOF, IOException{
         
+        reset_io();
         require_parse_next(); //Demand that there be a next json element
         var next = m_parser.next();
         if(next == Event.END_ARRAY){ //It can be an array end
-            log("Client disconnect\n");
-            reset_io();
+            log("Client disconnect\n");            
             return;
         }        
         
@@ -124,8 +124,9 @@ public class Service{
         
         //Failing this exits the program, but maybe that's a failsafe thing to do
         //if someone is sending unintelligible messages (in this case with bad type() strings)
-        var obj = (InMessage)MessageFactory.instance().create(m_parser);        
-        obj.process(this);        
+        var obj = (InMessage)MessageFactory.instance().create(m_parser);
+        
+        obj.process(this);          
     }
     
     static private void check_interrupt() throws GeneralInterruptException{
@@ -133,7 +134,7 @@ public class Service{
             throw new GeneralInterruptException(new InterruptedException());
     }
     
-    private void reset_io() throws FileNotFoundException, GeneralInterruptException, IOException{
+    private void reset_io() throws FileNotFoundException, GeneralInterruptException, CleanEOF, IOException, InterruptedException{
 
         if(m_parser != null)
             m_parser.close();
@@ -141,8 +142,15 @@ public class Service{
         if(m_in_stream != null)
             m_in_stream.close();
                       
-        if(m_out_stream != null)
+        if(m_out_stream != null){
+            try{
+                send_to_client(new Bye());
+            }
+            catch(Exception ex){
+                log("Warning: failed sending client disconnect request", null, ex);
+            }
             m_out_stream.close();
+        }
         
         //The file-open may block if the other side of the pipe is not yet connected
         //and it seems to do so non-interruptibly
@@ -150,6 +158,11 @@ public class Service{
         //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
         //NIO is supposed to be fully interruptible, but I guess Open JDK didn't account for the one-sided fifo case
         //Also, the two fifo opens have to be in the same order (client/server), or the operation will probably deadlock
+        
+        //Bizarre timing issue here. It seems that if you close a Linux fifo and then reopen it really quickly, the
+        //other end never sees the disconnect. We mitigate this by implementing a "Bye" message which represents a
+        //request for the browser to disconnect on its end, thus making connection termination explicit and better-defined.
+        Thread.sleep(1000);
         m_in_stream = new InputStreamReader(new NioFileInputStream(Config.instance.fifo_in_path.toFile()));
         m_out_stream = new OutputStreamWriter(new NioFileOutputStream(Config.instance.fifo_out_path.toFile()));
         check_interrupt();
@@ -162,6 +175,9 @@ public class Service{
         int ch;
         do{
             ch = m_in_stream.read();
+            if(ch < 0)
+                throw new CleanEOF("EOF looking for start of message");
+            
             if(ch == '[' || ch == '{'){
                 log("ERROR: Was expecting Mozilla protocol to include single-character prefix. Parsing fails.");
                 throw new JsonParsingException("Expected Mozilla message prefix ('!'/'Y')", null);
@@ -188,39 +204,49 @@ public class Service{
     //We need the same fat error handler twice, so here is a lamba for those function bodies
     @FunctionalInterface
     static interface MessageHandlingTask{
-        public void run() throws GeneralInterruptException, InterruptedException, Exception;
+        public void run() throws GeneralInterruptException, InterruptedException, EOFException, CleanEOF, IOException;
     }
     
-    private void message_loop_error_handler(MessageHandlingTask f) throws GeneralInterruptException, IOException{
+    private void message_loop_error_handler(MessageHandlingTask f) throws GeneralInterruptException{
         try{
-                f.run();
+            f.run();
         }
         catch(JsonException ex){
             //Ok, so because we hacked together an interruptible NIO-based implemention of the streams, as a result, some Json
-            //errors are due to interrupts, but we have to search the cause chain to find out which, so that we
+            //errors are due to interrupts, but we have to search the causal chain to find out which, so that we
             //can exit cleanly for those instead of logging or reporting them as errors
             ClosedByInterruptException cause = Util.search_causes(ClosedByInterruptException.class, ex);
             if( cause != null)
-                throw new GeneralInterruptException(cause); //clean exit
+                throw new GeneralInterruptException(cause); //cleanish exit. We might have been in the middle of something, but were told to quit.
             else{
                 log("json parse error. Resetting connection.", null, ex);
-                reset_io();
             }
         }
         catch(InterruptedException ex){
+            throw new GeneralInterruptException(ex);
+        }
+        catch(InterruptedIOException ex){
             throw new GeneralInterruptException(ex); //clean exit
+        }
+        catch(CleanEOF ex){
+            //Do nothing/proceed to next message
+        }
+        catch(EOFException ex){
+            log("Unexpected end of message", null, ex);
+        }
+        catch(IOException ex){
+            log("IO error", null, ex);
         }
         catch(Exception ex){
             //Report an unexpected error, which we recover from by resetting the IO state
             log("Unexpected error processing service IO", null, ex);
-            reset_io();
-        }
+        }        
     }
     
     private void message_loop() throws GeneralInterruptException, FileNotFoundException, IOException{                                   
 
-        message_loop_error_handler( ()->{ reset_io(); } );
-        
+        //Don't need this
+        //message_loop_error_handler( ()->{ reset_io(); } );        
         set_status_text("Status: READY");
         
         while(Main.exit_code() == null){
@@ -298,7 +324,7 @@ public class Service{
         }
         catch(GeneralInterruptException ex){
             if(Main.exit_code() == null){
-                log("Unexpected interrupt ocurred. Exiting...", null, ex);                                                
+                log("Interrupt ocurred. Exiting...", null, ex);                                                
                 return;
             }            
         }

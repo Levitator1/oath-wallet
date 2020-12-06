@@ -1,6 +1,6 @@
 package com.levitator.oath_wallet_service.messages.in;
 
-import com.levitator.oath_wallet_service.Service;
+import com.levitator.oath_wallet_service.messages.common.SessionMessageBase;
 
 /**
  *
@@ -8,10 +8,14 @@ import com.levitator.oath_wallet_service.Service;
  * service/gui process is up
  *
  */
-public class HiHowAreYou extends InMessage{
+public class HiHowAreYou extends SessionMessageBase{
 
-    @Override
-    public void process(Service serv) throws Exception {        
+    public HiHowAreYou(){
+        super();
+    }
+    
+    public HiHowAreYou(long session) {
+        super(session);
     }
             
     @Override

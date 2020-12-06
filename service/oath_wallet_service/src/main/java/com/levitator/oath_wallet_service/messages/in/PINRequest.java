@@ -5,15 +5,21 @@ import com.levitator.oath_wallet_service.Parser;
 import com.levitator.oath_wallet_service.Service;
 import com.levitator.oath_wallet_service.YkmanExitCodeException;
 import com.levitator.oath_wallet_service.YkmanProcess;
+import com.levitator.oath_wallet_service.messages.common.SessionMessageBase;
 import com.levitator.oath_wallet_service.messages.out.PINReply;
 import java.io.IOException;
 import javax.json.stream.JsonParser;
 
-public class PINRequest extends InMessage {
+public class PINRequest extends SessionMessageBase implements InMessage {
     
     private String m_url;    
     
-    public PINRequest(){        
+    public PINRequest(){
+        super();
+    }
+    
+    public PINRequest(long session){
+        super(session);
     }        
     
     @Override

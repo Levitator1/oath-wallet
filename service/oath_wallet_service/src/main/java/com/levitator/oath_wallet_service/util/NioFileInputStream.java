@@ -2,7 +2,9 @@ package com.levitator.oath_wallet_service.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 
@@ -23,9 +25,17 @@ public class NioFileInputStream extends InputStreamBase implements AutoCloseable
     }
     
     @Override
-    public int read(byte[] b, int off, int len) throws IOException{
+    public int read(byte[] b, int off, int len) throws IOException, InterruptedIOException{
         var buf = ByteBuffer.wrap(b, off, len);
-        int result = m_in_chan.read(buf);
+        
+        int result = -1;
+        try{
+            result = m_in_chan.read(buf);
+        }
+        catch(ClosedByInterruptException ex){
+            throw new InterruptedIOException("Async close while calling NIO read()");
+        }
+        
         if(result > 0)
             pos += buf.remaining();
         
