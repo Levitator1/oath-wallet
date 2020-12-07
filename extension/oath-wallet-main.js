@@ -327,10 +327,52 @@ class NativeMessage extends Event{
     message;
     
     constructor(msg){
-        super("native_message");
+        super(msg.type);
         this.message = msg;
     }
 };
+
+class DisconnectEvent extends Event{
+    constructor(){
+        super("disconnect");
+    }
+}
+
+//Ok, so it's kind of mindbending that there should be concurrency issues in stupid javascript, but I guess there sort of are.
+//If nothing else, out-of-order crap may happen in the debugging environment. Sometimes you post a native message, and then events
+//start mysteriously firing before you return from the script or call the await operator.
+//We will go out on a limb and assume that arithmetic operations are atomic, so you cannot do ++x in two places and still get x+1
+//Let's additionally hope there are no races between push() and shift()
+class Mutex{
+    x=0;
+    wait_queue = [];
+    
+    lock(){
+        var result = (++this.x === 1);
+        if(result)
+            return new Promise( (resolve, reject)=>{ resolve(true); } ); //sucess, return a resolved promise
+        else{
+            //temporary failure. Return a pending promise and stick the resolve function in the wait queue.
+            var resolve2;
+            var prom = new Promise( (resolve, reject)=>{ resolve2 = resolve;  } );
+            this.wait_queue.push(resolve2);
+            return prom;
+        }
+    }
+    
+    unlock(){                                
+        var resolve;
+        var newx=--this.x;
+                
+        //There could be a race where x is incremented but the queue has not been updated.
+        //So, unless we are the last Mutex owner, spin until one queue element is released
+        if(newx > 0){
+            while( (resolve = this.wait_queue.shift()) == null ){}
+            resolve(true);
+        }                     
+    }
+}
+
 
 //The connection to the backend process
 //It will internally connect and disconnect as needed
@@ -338,10 +380,25 @@ class BackendLink{
     port=null;
     connected=false;
     
-    session_message_handlers = {};
+    session_message_handlers = new EventTarget();
+    persistent_message_handlers = new EventTarget();
     session_pending_timeouts = {};
-    persistent_message_handlers = {};        
-            
+    
+    //Ok, so javascript is supposed to have a central event loop that dispatches events in sequence from a queue
+    //when the script is idle so that the events don't race with the script contents, so I am surprised
+    //to discover that native-messaging events happen pretty much completely asynchronously. So, we implement our own queue
+    //to stuff them into in order to keep them in order until we are able to get around to them.
+    //Also, I found that debugging of native message events is otherwise flaky and unreliable under Firefox
+    //So, by queing them up first and then later dispatching them as ordinary DOM events, that avoids those problems
+    //and makes debugging much easier. The native-messaging API is a half-baked mess.
+    event_queue = [];
+    m_consume = false;
+    drain_mutex = new Mutex(); //Ensure that drain() is not reentrant, and any overlapping attempts are queued serially
+    
+    constructor(){
+        this.persistent_message_handlers.addEventListener("disconnect", this.internal_disconnect_handler);
+    }
+    
     connect = () => {
         this.port = browser.runtime.connectNative('com.levitator.oath_wallet_service');
         this.connected = this.port.error === null || this.port.error.length === 0;
@@ -350,29 +407,70 @@ class BackendLink{
             this.port.onDisconnect.addListener( this.disconnect_handler );
         }
         else
-            throw this.port.error;
+            throw new Error(this.port.error);
+    }
+    
+    get consume(){
+        return this.m_consume;
+    }
+    
+    set consume(v){
+        this.m_consume = v;
+        this.drain_events();
+    }
+    
+    //Can be interrupted while processing events if an event handler sets "consume" false
+    //Returns the number of remaining events in the queue, which will often be 0
+    drain_events = ()=> {
+        return this.drain_mutex.lock().then( () => {
+            var evt;
+            while(this.m_consume){
+                evt = this.event_queue.shift();
+                if(evt == null)
+                    break;
+                this.session_message_handlers.dispatchEvent(evt);
+                this.persistent_message_handlers.dispatchEvent(evt);
+            }
+            return this.event_queue.length;
+        }).finally(this.drain_mutex.unlock());
     }
     
     message_handler = (msg) => {
-        try{
-            if(config.debug) debug("GOT: " + JSON.stringify(msg));        
-            var target = this.persistent_message_handlers[msg.type];
-            var evt = new NativeMessage(msg);
-            if(target !== undefined)
-                target.dispatchEvent(evt);
-
-            var target = this.session_message_handlers[msg.type];
-            if(target !== undefined)
-                target.dispatchEvent(evt);
-        }
-        catch(ex){
-            logmsg2("Exception in message_handler()", ex);
-        }
+        this.event_queue.push(new NativeMessage(msg));
+        if(this.m_consume && this.event_queue.length == 0)
+            this.drain_events();
+    }
+            
+    disconnect_handler = () => {
+        this.event_queue.push(new DisconnectEvent());
+        if(this.consume)
+            this.drain_events();
+    }
+        
+    internal_disconnect_handler = (evt) => {
+        
+        //Stop consuming messages until the object user is ready for the
+        //next session
+        this.consume = false;
+        
+        //Trigger session-scope timeouts early upon session close
+        Object.entries(this.session_pending_timeouts).forEach( (obj)=>{            
+            clearTimeout(obj[0]);
+            obj[1]();
+            debug("Triggered a message timeout early due to disconnect");
+        });
+        this.session_pending_timeouts = [];
+        this.session_message_handlers = new EventTarget();        
     }
     
     send_message = (msg, timeout) => {
         if(!this.connected)
             this.connect();
+        
+        //Create these first because events come rolling in immediately before return to the browser
+        //How that happens is a total mystery, as it's supposed to require a return to the event loop
+        //Maybe postMessage() calls the event loop
+        var promises = [this.until_session_message( ByeMessage, config.startup_timeout ), this.until_disconnect(config.message_timeout)];
         
         if(Array.isArray(msg))
             this.port.postMessage(msg);
@@ -382,7 +480,7 @@ class BackendLink{
         //debugger;
         //return this.until_session_message( ByeMessage, config.startup_timeout ).then(this.until_disconnect(config.message_timeout));
         
-        return [this.until_session_message( ByeMessage, config.startup_timeout ), this.until_disconnect(config.message_timeout)];
+        return promises;
     }
     
     until_disconnect = (timeout)=>{
@@ -395,38 +493,32 @@ class BackendLink{
             }, timeout); 
         });
     
-        this.port.onDisconnect.addListener( () => {
+        this.session_message_handlers.addEventListener( "disconnect", () => {
             resolver(null); 
             debug("disconnect promise resolved");
         });
         return prom;
     }        
     
-    static add_message_handler = (cls, handler, collection) =>{ 
-        var target = collection[cls.static_type];
-        if(target === undefined)
-            collection[cls.static_type] = target = new EventTarget();
-        target.addEventListener("native_message", handler);
+    static add_message_handler = (cls, handler, target) =>{        
+        target.addEventListener(cls.static_type, handler);                
         debug("registered listener for message type: " + cls.static_type);
     }
     
-    when_session_message = (cls, handler) => {
+    when_session_message = (cls, handler) => {        
         BackendLink.add_message_handler(cls, handler, this.session_message_handlers);
     }
     
     when_message_ever = (cls, handler) => {
         this.add_message_handler(cls, handler, this.persistent_message_handlers);
-    }   
+    }
     
     when_message = (cls, handler, ever) => {
         ever ? this.when_message_ever(cls, handler) : this.when_session_message(cls, handler);
     }
     
-    remove_message_handler_from_collection = (cls, handler, col) => {
-        var target = col[cls.static_type];
-        if(target === undefined)
-            return;
-        target.removeEventListener("message", handler);
+    remove_message_handler_from_collection = (cls, handler, target) => {        
+        target.removeEventListener(cls.static_type, handler);
     }
     
     remove_message_handler = (cls, handler) => {
@@ -447,22 +539,24 @@ class BackendLink{
         var timeouts = this.session_pending_timeouts;
         var new_handler;
         var remove_func = this.remove_message_handler;
+        var timeout_id_box = [];
         var prom = new Promise( (resolve, reject)=> {            
             new_handler = (evt) => {
+                clearTimeout(timeout_id_box[0]);
+                delete this.session_pending_timeouts[timeout_id_box[0]];
                 remove_func(cls, this);
                 resolve(evt);
-                debug("successfully resolved message promise");
+                debug("successfully resolved message promise: " + cls.static_type);
             };
-            remove_func(cls, new_handler); //Probably not necessary?
+            //remove_func(cls, new_handler); //Probably not necessary?
             var new_handler2=new_handler;
                         
             //If session-scope
-            if(!ever){
+            if(timeout != null){
                 var timeout_func = (err)=>{ remove_func(cls, new_handler2); reject(err); debug("got timeout for message type: " + cls.static_type); };
-                timeouts[new_handler2] = {
-                    "timeout_id": setTimeout( timeout_func, timeout),
-                    "timeout_func": timeout_func
-                };
+                timeout_id_box[0] = setTimeout( timeout_func, timeout);
+                if(!ever)
+                    this.session_pending_timeouts[timeout_id_box[0]] = timeout_func;
             }
         });
         //debugger;        
@@ -473,17 +567,6 @@ class BackendLink{
     until_message_ever = (cls, timeout) => { return this.until_message(cls, timeout, true); }
     
     until_session_message = (cls, timeout) => { return this.until_message(cls, timeout, false); }
-        
-    disconnect_handler = () => {
-        //Trigger session-scope timeouts early upon session close
-        Object.values(this.session_pending_timeouts).forEach( (obj)=>{            
-            clearTimeout(obj.timeout_id);
-            obj.timeout_func();
-            debug("Triggered a message timeout early due to disconnect");
-        });
-        this.session_pending_timeouts = [];
-        this.session_message_handlers = new EventTarget();        
-    }
 };
 
 class Client{
@@ -518,6 +601,8 @@ async function fetch_pin_command(){
         window.client = new Client();
         //await client.start().then( ()=>{ notify("READY"); }, on_init_fail );
         var results = client.start();
+        window.client.link.consume = true;
+        
         await results[0];
         debug( "HRM...:" + window.client.link.session_pending_timeouts.length );
         await results[1];
