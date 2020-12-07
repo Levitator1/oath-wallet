@@ -229,6 +229,7 @@ public class PipeMode extends Thread implements AutoCloseable{
     @Override
     public void run() {
         try{
+            setName("OATH Wallet 1-Shot Client Relay Thread");
             same_thread_run();
         }
         catch(Exception ex){            

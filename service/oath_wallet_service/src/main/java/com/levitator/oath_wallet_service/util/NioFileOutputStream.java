@@ -1,5 +1,6 @@
 package com.levitator.oath_wallet_service.util;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -48,12 +49,17 @@ public class NioFileOutputStream extends OutputStreamBase{
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        var buf = ByteBuffer.wrap(b, off, len);
+        int ct;
+        var buf = ByteBuffer.wrap(b, off, len);        
         try{
-            m_channel.write(buf);
+            while(buf.remaining() > 0){
+                ct = m_channel.write(buf);
+                if(ct < 0)
+                    throw new EOFException();                
+            }
         }
         catch(ClosedByInterruptException ex){
-            throw new InterruptedIOException("Asynch close calling NIO write()");
+            throw new InterruptedIOException("Async close calling NIO write()");
         }
     }
 }

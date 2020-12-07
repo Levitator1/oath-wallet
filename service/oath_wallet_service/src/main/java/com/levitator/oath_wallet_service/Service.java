@@ -24,18 +24,13 @@ import com.levitator.oath_wallet_service.util.NioFileInputStream;
 import com.levitator.oath_wallet_service.util.NioFileOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ClosedByInterruptException;
@@ -84,12 +79,12 @@ public class Service{
     static public void send_message( OutMessage msg, OutputStream out) throws IOException{
         
         //Looks like we have to buffer these objects one at a time because a given parser
-        //seems to expect a single document root
-       //var bufstream = new StringWriter();
-       var bufstream = new ByteArrayOutputStream();                     
-       var writer = Json.createWriter(bufstream);      
-       writer.write(msg.toJson().build());
-       writer.close();
+        //instance seems to expect a single document root
+        //var bufstream = new StringWriter();
+        var bufstream = new ByteArrayOutputStream();                     
+        var writer = Json.createWriter(bufstream);      
+        writer.write(msg.toJson().build());
+        writer.close();
        
         //Stupid undocumented MDN crap
         final ByteBuffer buf = ByteBuffer.wrap(new byte[4]);
@@ -149,27 +144,29 @@ public class Service{
     }
     
     private void reset_io() throws FileNotFoundException, GeneralInterruptException, CleanEOF, IOException, InterruptedException{
-
+        
+        if(m_out_stream != null){
+            try{
+                send_to_client(new Bye());
+            }
+            catch(Exception ex){                
+                //log("Warning: failed sending client disconnect request", null, ex);
+            }
+        }
+        
         if(m_parser != null)
             m_parser.close();
         
         if(m_in_stream != null)
             m_in_stream.close();
                       
-        if(m_out_stream != null){
-            try{
-                send_to_client(new Bye());
-            }
-            catch(Exception ex){
-                log("Warning: failed sending client disconnect request", null, ex);
-            }
+        if(m_out_stream != null)            
             m_out_stream.close();
-        }
         
         //The file-open may block if the other side of the pipe is not yet connected
         //and it seems to do so non-interruptibly
         check_interrupt();
-        //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt
+        //On exit, this gets unblocked by a file-open so that we are awake and can see the interrupt.
         //NIO is supposed to be fully interruptible, but I guess Open JDK didn't account for the one-sided fifo case
         //Also, the two fifo opens have to be in the same order (client/server), or the operation will probably deadlock
         
@@ -182,16 +179,23 @@ public class Service{
         check_interrupt();
         
         //Looks like each message from the browser is a Pascal string with a 4-byte header representing the string length
-        //in little endian... so, machine byte order?. It would be nice if the MDN manuals mentioned that. Maybe it turns
+        //in little endian for me... so, machine byte order?. It would be nice if the MDN manuals mentioned that. Maybe it turns
         //out to be a lucky thing since the json parser seems to be hanging reading off the end of the available data.
+        
+        //Also, need to remember that it's normal to get an empty first message here in the Netbeans debugger because it
+        //it doesn't output to stdin by default
+        
         var lenbytes = ByteBuffer.wrap( new byte[4] );
         lenbytes.order(ByteOrder.nativeOrder());
-        m_in_stream.read(lenbytes.array(), lenbytes.arrayOffset(), 4);
+        if(m_in_stream.read(lenbytes.array(), lenbytes.arrayOffset(), 4) < 4)
+            throw new CleanEOF("EOF awaiting message length");        
         var strlen = lenbytes.getInt();
         
         
         byte[] buf = new byte[strlen];
-        m_in_stream.read(buf);
+        if(m_in_stream.read(buf) < strlen)
+            throw new EOFException("EOF reading message of expected length: " + strlen);
+        
         var current_message = new ByteArrayInputStream(buf);
         
 //        try(var in = new InputStreamReader(m_in_stream)){

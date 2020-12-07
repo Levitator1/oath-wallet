@@ -31,8 +31,8 @@
   "commands": {
   "oath-sign-in": {
     "suggested_key": {
-      "default": "Alt+O",
-      "linux" : "Alt+O"
+      "default": "Ctrl+Alt+Insert",
+      "linux" : "Ctrl+Alt+Insert"
     },
     "description": "Retrieve an OATH Wallet PIN"
   }
