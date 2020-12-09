@@ -16,11 +16,11 @@ var release_config = {
   
 };
 
-var debug_config_timeout = 60 * 1000 * 60;
-//var debug_config_timeout = 1000 * 5;
+//var debug_config_timeout = 60 * 1000 * 60;
+var debug_config_timeout = 1000 * 10;
 var debug_config = {
     debug: true,
-    startup_timeout: debug_config_timeout,
+    startup_timeout: release_config.startup_timeout,
     message_timeout: debug_config_timeout
 };
 
@@ -46,7 +46,7 @@ function notify(message){
 
 //Notify of exception
 function notify_ex(message, ex){
-    notify2(extension_title + " ERROR", message + ex != null ? ex.message : "" );
+    notify2(extension_title + " ERROR", message + (ex != null ? ex.message : "") );
 }
 
 function fetch_pin_command_failure(message){
@@ -69,7 +69,7 @@ function logmsg(msg){
 }
 
 function logmsg2(msg, ex){
-    logmsg(msg + ": " + ex.message + "\n" + ex.stack != null ? ex.stack : "");
+    logmsg(msg + ": " + ex.message + "\n" + (ex.stack != null ? ex.stack : ""));
 }
 
 function do_throw(err){
@@ -268,7 +268,10 @@ class ByeMessage extends Message{
         super(ByeMessage);
     }   
     
-    process = (state) => {};
+    process = (state) => {
+        state.client.disconnect();
+        debug("Disconnect on client-side");
+    };
     
 };
 
@@ -331,6 +334,9 @@ const sleep = (milliseconds) => {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 };
 
+class MutexQueueFull extends Error{    
+}
+
 //Ok, so it's kind of mindbending that there should be concurrency issues in stupid javascript, but I guess there sort of are.
 //If nothing else, out-of-order crap may happen in the debugging environment. Sometimes you post a native message, and then events
 //start mysteriously firing before you return from the script or call the await operator.
@@ -362,7 +368,7 @@ class Mutex{
             }
             else{
                 --x;
-                return new Promise( (resolve, reject) => { reject(); } );
+                return new Promise( (resolve, reject) => { reject(new MutexQueueFull()); } );
             }
         }
     }
@@ -424,6 +430,17 @@ class BackendLink{
             throw new Error(this.port.error);
     }
     
+    disconnect = () => {
+        this.port.disconnect();
+        this.connected = false;
+        
+        //Client-side disconnect does not raise a disconnect event even though a disconnect takes place
+        //so we synthesize it
+        this.disconnect_handler();
+        
+        debug("Client-side port disconnect");
+    }
+    
     get consume(){
         return this.m_consume;
     }
@@ -468,14 +485,17 @@ class BackendLink{
                 this.persistent_message_handlers.dispatchEvent(evt);
             }
             return this.event_queue.length;
+        }).catch( (ex) => {
+            if(!(ex instanceof MutexQueueFull))
+                throw ex;
         }).finally(this.drain_mutex.unlock());
     }
     
     message_handler = (msg) => {
-        try{            
+        try{
+            debug("MESSAGE IN: " + JSON.stringify(msg));
             this.event_queue.push(new NativeMessage(msg));
-            if(this.m_consume && this.event_queue.length == 0)
-                this.drain_events();
+            this.drain_events();
         }
         catch(ex){
             notify_ex("Failed processing message from back-end. There is probably some problem with the installation. " + 
@@ -494,9 +514,8 @@ class BackendLink{
     }
             
     disconnect_handler = () => {
-        this.event_queue.push(new DisconnectEvent());
-        if(this.consume)
-            this.drain_events();
+        this.event_queue.push(new DisconnectEvent());        
+        this.drain_events();
     }
         
     internal_disconnect_handler = (evt) => {
@@ -534,15 +553,17 @@ class BackendLink{
     
     until_disconnect = (timeout)=>{
         var resolver=null;
+        var timeout_id;
         var prom = new Promise((resolve, reject)=>{ 
             resolver = resolve; 
-            setTimeout(()=>{
+            timeout_id = setTimeout(()=>{
                 reject(new Error("timeout"));
                 debug("disconnect promise timed out");
             }, timeout); 
         });
     
         this.session_message_handlers.addEventListener( "disconnect", () => {
+            clearTimeout(timeout_id);
             resolver(null); 
             debug("disconnect promise resolved");
         });
@@ -579,8 +600,6 @@ class BackendLink{
            debug("found a timeout object to cancel");
            clearTimeout(timeout.timeout_id);
            delete this.session_pending_timeouts[handler];
-           if(this.session_pending_timeouts[handler] != null)
-               debug("SRSLY?");
        }          
     }
     
@@ -622,11 +641,16 @@ class Client{
     link;
     
     constructor(){
-        this.link = new BackendLink();                  //Initialize connection state        
+        this.link = new BackendLink();                  //Initialize connection state
+        this.link.client_state['client'] = this;
     }
     
     start(){
         return this.link.send_message(new HelloMessage(), config.startup_timeout);     //Send a no-op message to launch the backend/gui
+    }
+    
+    disconnect(){
+        this.link.disconnect();
     }
     
     pin_query(){
@@ -643,13 +667,12 @@ function browser_command_handler (command) {
 	if (command === "oath-sign-in")
             fetch_pin_command();
 	else
-	  throw "Command: '" + command + "' is not recongized. Perhaps someone does us a bamboozle."; //Should not happen
+	  throw new Error("Command: '" + command + "' is not recongized. Perhaps someone does us a bamboozle."); //Should not happen
 
   }catch(err){
 	  show_error(err);
   }
 }
-
 
 // Main
 client = null;
@@ -668,8 +691,8 @@ catch(ex){
 }
 
 function init_fail(ex){
-    var msg = "Failed connecting to back-end service. The extension may not be installed properly" + ex !=null ? ex.message : "";
-    notify(msg);
+    var msg = "Failed connecting to back-end service. The extension may not be installed properly";
+    notify_ex(msg, ex);
 }
 
 async function fetch_pin_command(){
