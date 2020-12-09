@@ -12,12 +12,12 @@ var extension_title = "OATH Wallet";
 var release_config = {
   debug: false,
   startup_timeout: 60 * 1000,  
-  message_timeout: 10 * 1000
+  message_timeout: 30 * 1000
   
 };
 
 //var debug_config_timeout = 60 * 1000 * 60;
-var debug_config_timeout = 1000 * 10;
+var debug_config_timeout = 1000 * 30;
 var debug_config = {
     debug: true,
     startup_timeout: release_config.startup_timeout,
@@ -46,7 +46,7 @@ function notify(message){
 
 //Notify of exception
 function notify_ex(message, ex){
-    notify2(extension_title + " ERROR", message + (ex != null ? ex.message : "") );
+    notify2(extension_title + " ERROR", message + (ex != null ? ": " + ex.message : "") );
 }
 
 function fetch_pin_command_failure(message){
@@ -147,18 +147,6 @@ function handleMessage(message, sender, response_f){
     }
 }
 
-
-//Identify the tab which received the PIN-request keystroke
-async function get_active_tab(){
-	var tabs = await browser.tabs.query( { active: true, currentWindow: true, discarded: false, hidden:false} );
-	if(tabs.length > 1)
-		throw "A query for the active web page returned more than one result. This is confusing, so I can't fetch a PIN.";
-
-	if(tabs.length < 1)
-		throw "Unexpectedly unable to find the current active web page. This is probably a bug.";
-
-	return tabs[0];
-}
 /*
 async function fetch_pin_command(){
 
@@ -201,7 +189,7 @@ class ErrorMessage extends Message{
     }
     
     process = (state) => {
-        notify_ex(message);
+        notify_ex(this.message);
     }
 };
 
@@ -546,9 +534,10 @@ class BackendLink{
             this.port.postMessage( [ msg ] );
         
         this.consume = true;
-        var prom = this.until_session_message( ByeMessage, config.startup_timeout ).then(this.until_disconnect(config.message_timeout));
+        var prom2 = this.until_disconnect(timeout);
+        var prom1 = this.until_session_message( ByeMessage, timeout ).then( prom2 );
         this.drain_events();
-        return prom;
+        return prom1;
     }
     
     until_disconnect = (timeout)=>{
@@ -633,7 +622,6 @@ class BackendLink{
     }
     
     until_message_ever = (cls, timeout) => { return this.until_message(cls, timeout, true); }
-    
     until_session_message = (cls, timeout) => { return this.until_message(cls, timeout, false); }
 };
 
@@ -653,8 +641,32 @@ class Client{
         this.link.disconnect();
     }
     
-    pin_query(){
-        this.link.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") );
+    //Identify the browser tab/session which received the PIN-request keystroke
+    get_active_tab = async () => {
+        var tabs = await browser.tabs.query( { active: true, currentWindow: true, discarded: false, hidden:false} );
+        if(tabs.length > 1)
+                throw new Error("A query for the active browser tab returned more than one result. This is confusing, so I can't fetch a PIN.");
+
+        if(tabs.length < 1)
+                throw new Error("Unexpectedly unable to find the current active browser tab. This is probably a bug.");
+        
+        //If this should pose a problem, then we could go by URL, too, but that has the potential to be ambiguous
+        //But we can throw an error for that
+        if(tabs[0].id == null)
+            throw new Error("This browser does not support the 'id' property on tab objects.");
+               
+        if(tabs[0] == tabs.TAB_ID_NONE)
+            throw new Error("This tab does not contain a Web page and is not eligible for OATH retrieval");
+        
+        return tabs[0];
+    }
+    
+    pin_query = async ()=> {
+        this.link.until_session_message(PinReply, 3000).catch( () =>
+            notify("OATH PIN requested.\nYou may need to activate or touch your key device to proceed."));
+        var session_id = (await this.get_active_tab()).id;
+                
+        return this.link.send_message( new PinRequest(session_id, "https://www.facebook.com/blah/blah/blah") );        
     }
 }
 
@@ -680,7 +692,7 @@ client = null;
 try{
     notify("starting");    
     client = new Client();
-    //await client.start().then( ()=>{ notify("READY"); }, on_init_fail );
+    
     client.start().then( ()=>{
         browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
         notify("READY");
@@ -696,8 +708,11 @@ function init_fail(ex){
 }
 
 async function fetch_pin_command(){
-    client.pin_query();    
+    try{
+        await client.pin_query();
+    }
+    catch(ex){
+        notify_ex("Error retrieving PIN number", ex);
+    }
 }
-
-//browser.runtime.onMessage.addListener(handleMessage);
 

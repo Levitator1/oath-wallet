@@ -101,7 +101,13 @@ public class Service{
     
     public void error_to_client(String message, long session) throws IOException{
         var packet = new ErrorMessage(message, session);
-        send_to_client(packet);
+        try{
+            send_to_client(packet);
+        }
+        catch(IOException ex){
+            log("Warning: was unable to send an error message to the client: " + message);
+            log("Client error was", null, ex);
+        }
     }
     
     public void notice_to_client(String message, long session) throws IOException{
@@ -131,11 +137,16 @@ public class Service{
         if(next != Event.START_OBJECT) //or an object start
             throw new JsonParsingException ("Expected start of JSON object", m_parser.getLocation());                
         
-        //Failing this exits the program, but maybe that's a failsafe thing to do
-        //if someone is sending unintelligible messages (in this case with bad type() strings)
-        var obj = (InMessage)MessageFactory.instance().create(m_parser);
+        InMessage obj;
+        try{
+            obj = (InMessage)MessageFactory.instance().create(m_parser);
+        }
+        catch(Exception ex){
+            error_to_client("Error parsing client message: " + ex.getMessage(), 0);
+            throw ex;
+        }
         
-        obj.process(this);          
+        obj.process(this);       
     }
     
     static private void check_interrupt() throws GeneralInterruptException{

@@ -8,8 +8,7 @@ package com.levitator.oath_wallet_service;
 public class YkmanExitCodeException extends ProcessReturnCodeException{
     
     public YkmanExitCodeException(ProcessReturnCodeException ex){
-        super("'ykman' tool returned non-zero, which generally means there was an error. Exit code: " +
+        super("'ykman' tool returned non-zero, which generally means there was an error.\nExit code: " +
                 ex.result() + ". stderr follows:\n" + ex.getMessage() + "------------------------------------- end stderr\n",  ex.result());
     }
-    
 }
