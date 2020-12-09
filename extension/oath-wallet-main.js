@@ -221,6 +221,22 @@ class PinRequest extends SessionMessage{
     }    
 };
 
+//Escape a string so that it can be placed in a javascript string literal
+//The string must include its quotes.
+//Replace each backslash with two backsalshes
+//Replace each single or double quote with a backslash
+function escape_string(str){
+    var str = str.replaceAll("\\", "\\\\");
+    
+    if(str.charAt(0) == '\'')
+            str = str.replaceAll("'","\\'");
+        
+    else if(str.charAt(0) == '"')
+            str = str.replaceAll("\"", '\\"');
+    else
+        throw new Error("Unrecoginzed quote style escaping string");
+}
+
 class PinReply extends SessionMessage{
     static static_type="pin_reply"
     url;
@@ -231,8 +247,36 @@ class PinReply extends SessionMessage{
         super(PinReply);
     }
     
+    output_func_script=`
+        
+        ((pin) => {
+        try{
+            var ctrl = document.activeElement;
+            if(!ctrl instanceof HTMLInputElement){
+                alert("Error: You must have an input control active to input a PIN");
+                return;
+            }
+
+            var type = ctrl.type;
+            if(type != "number" && type != "password" && type != "text"){
+                alert("Error: the active control on the page must be of type: number, password, or text");
+                return;
+            }
+            ctrl.value = pin;
+        }
+        catch(ex){
+            alert("Error inserting PIN number into page: " + ex.message);
+        }
+    })    
+`
+    
+    //output_func_script=` constructor(){ alert('EH????????'); } `
+    
     process = (state) => {
-        notify( "WOOTS: " + JSON.stringify(this) );
+        //notify( "WOOTS: " + JSON.stringify(this) );                
+        var script = this.output_func_script + "('" + escape_string(this.pin) + "')";
+        script = script.replaceAll("\n", "");
+        browser.tabs.executeScript(Number(this.session_id), {'code': script}).catch( (ex) => notify_ex("OOPS", ex) );
     }    
 };
 
@@ -664,8 +708,8 @@ class Client{
     pin_query = async ()=> {
         this.link.until_session_message(PinReply, 3000).catch( () =>
             notify("OATH PIN requested.\nYou may need to activate or touch your key device to proceed."));
-        var session_id = (await this.get_active_tab()).id;
-                
+        var session_id = (await this.get_active_tab()).id;       
+
         return this.link.send_message( new PinRequest(session_id, "https://www.facebook.com/blah/blah/blah") );        
     }
 }
