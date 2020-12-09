@@ -1,4 +1,4 @@
-/* global config, browser */
+/* global config, browser, client */
 
 //Haven't found a good way to cenralize this string, so it has to be set both here
 //and in manifest.json. It does have to be consistent in order to work.
@@ -42,6 +42,11 @@ function notify2(title, message){
 
 function notify(message){
     notify2(extension_title, message);
+}
+
+//Notify of exception
+function notify_ex(message, ex){
+    notify2(extension_title + " ERROR", message + ex != null ? ex.message : "" );
 }
 
 function fetch_pin_command_failure(message){
@@ -189,9 +194,15 @@ class ErrorMessage extends Message{
     
     static static_type = "error";
     
+    message;
+    
     constructor(){
         super(ErrorMessage);
-    }        
+    }
+    
+    process = (state) => {
+        notify_ex(message);
+    }
 };
 
 class SessionMessage extends Message{
@@ -232,6 +243,9 @@ class PinReply extends SessionMessage{
         super(PinReply);
     }
     
+    process = (state) => {
+        notify( "WOOTS: " + JSON.stringify(this) );
+    }    
 };
 
 class Notification extends SessionMessage{
@@ -242,76 +256,40 @@ class Notification extends SessionMessage{
         super(Notification);
     }
     
+    process = (state) => {
+        notify(this.message);
+    }    
 };
 
 class ByeMessage extends Message{
     static static_type="bye";
-    
+            
     constructor(){
         super(ByeMessage);
-    }    
+    }   
+    
+    process = (state) => {};
+    
 };
 
-var message_registry = [ PinReply, Notification, ErrorMessage, ByeMessage ];
-
-//Map a key to a set of values
-class MultiMap{
-    data = {};
+class MessageRegistry{
+    messages = {};
     
-    merge = (rhs) => {
-        Object.keys(rhs.data).forEach( (k)=>{
-            var obj = this.data[k];
-            if(obj === undefined)
-                this.data[k] = obj = {};
-            Object.assign( obj, rhs.data[k] );
-        });        
-    }
-    
-    add = (k,v) => {
-        var set = data[k];
-        if(set === undefined)
-            data[k] = { v: null };
-        else
-            set[v]=null;
-    }
-    
-    get = (k) => {
-        return data[k];
-    }
-    
-    require = (k) => {
-        var result = data[k];
-        if(result === undefined)
-            throw new RangeError("MultiMap key out of range");
-        else
-            return result;
-    }
-    
-    remove_of_key = (k) => {
-        data[k] = undefined;
-    }
-    
-    remove = (k, v) => {
-        var set = data[k];
-        if(set === undefined)
-            return;
-        
-        delete set[v];
-        if(Object.keys(set).length <= 0)
-            delete data[k];
-    }
-    
-    forEach = (f) => {
-        Object.keys(data).forEach( (set) => {
-            Object.keys(set).forEach( (k)=>{
-                f(k);
-            });
+    register = (classes) => {
+        classes.forEach( (cls) => {           
+            this.messages[cls.static_type] = cls;
         });
-    }    
+    }
+    
+    get = (name) => this.messages[name];        
 }
 
+//Enumerate the types of messages which the client will recognize and construct from protocol messages
+var message_classes = [ PinReply, Notification, ErrorMessage, ByeMessage ];
+var message_registry = new MessageRegistry();
+message_registry.register(message_classes);
+
 class DisconnectedException extends Error{
-    
 };
 
 function handle_event(f){
@@ -323,20 +301,35 @@ function handle_event(f){
     }    
 }
 
+//Native messages go into the queue like this
 class NativeMessage extends Event{
+    message;
+    
+    constructor(msg){
+        super("native_message");
+        this.message = msg;
+    }
+};
+
+//Native messages are pulled out of the queue and are dispatched like this
+class ClientMessageEvent extends Event{
     message;
     
     constructor(msg){
         super(msg.type);
         this.message = msg;
     }
-};
+}
 
 class DisconnectEvent extends Event{
     constructor(){
         super("disconnect");
     }
 }
+
+const sleep = (milliseconds) => {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+};
 
 //Ok, so it's kind of mindbending that there should be concurrency issues in stupid javascript, but I guess there sort of are.
 //If nothing else, out-of-order crap may happen in the debugging environment. Sometimes you post a native message, and then events
@@ -345,18 +338,32 @@ class DisconnectEvent extends Event{
 //Let's additionally hope there are no races between push() and shift()
 class Mutex{
     x=0;
+    max_queue=Number.MAX_SAFE_INTEGER;
     wait_queue = [];
     
-    lock(){
+    constructor(queue_size){
+        if(queue_size != null)
+            this.max_queue = queue_size;
+    }
+    
+    //true: block
+    //false: return immediately
+    lock(block){
         var result = (++this.x === 1);
         if(result)
             return new Promise( (resolve, reject)=>{ resolve(true); } ); //sucess, return a resolved promise
         else{
-            //temporary failure. Return a pending promise and stick the resolve function in the wait queue.
-            var resolve2;
-            var prom = new Promise( (resolve, reject)=>{ resolve2 = resolve;  } );
-            this.wait_queue.push(resolve2);
-            return prom;
+            if(block && x - 1 <= this.max_queue){
+                //temporary failure. Return a pending promise and stick the resolve function in the wait queue.
+                var resolve2;
+                var prom = new Promise( (resolve, reject)=>{ resolve2 = resolve;  } );
+                this.wait_queue.push(resolve2);
+                return prom;
+            }
+            else{
+                --x;
+                return new Promise( (resolve, reject) => { reject(); } );
+            }
         }
     }
     
@@ -367,7 +374,7 @@ class Mutex{
         //There could be a race where x is incremented but the queue has not been updated.
         //So, unless we are the last Mutex owner, spin until one queue element is released
         if(newx > 0){
-            while( (resolve = this.wait_queue.shift()) == null ){}
+            while( (resolve = this.wait_queue.shift()) == null ){  }
             resolve(true);
         }                     
     }
@@ -380,23 +387,30 @@ class BackendLink{
     port=null;
     connected=false;
     
+    client_state = {}; //State data message objects might need to keep track of what's going on
     session_message_handlers = new EventTarget();
     persistent_message_handlers = new EventTarget();
     session_pending_timeouts = {};
     
     //Ok, so javascript is supposed to have a central event loop that dispatches events in sequence from a queue
     //when the script is idle so that the events don't race with the script contents, so I am surprised
-    //to discover that native-messaging events happen pretty much completely asynchronously. So, we implement our own queue
+    //to discover that native-messaging events happen pretty much completely asynchronously (hopefully not reentrantly).
+    //So, we implement our own queue
     //to stuff them into in order to keep them in order until we are able to get around to them.
     //Also, I found that debugging of native message events is otherwise flaky and unreliable under Firefox
     //So, by queing them up first and then later dispatching them as ordinary DOM events, that avoids those problems
-    //and makes debugging much easier. The native-messaging API is a half-baked mess.
+    //and makes debugging much easier. The native-messaging API is a half-baked mess. I suppose the debugging problems
+    //could crop up again in the case where the native-message event encounters an idle queue and is forced to kickstart it
+    //because then the events are being handled on the native message call chain again.
     event_queue = [];
     m_consume = false;
-    drain_mutex = new Mutex(); //Ensure that drain() is not reentrant, and any overlapping attempts are queued serially
+    
+    //Ensure that drain() is not reentrant, and there can be only one drain_events() operation in the wait queue,
+    //which is all that is needed to sustain the draining sequence until it is done
+    drain_mutex = new Mutex(1);
     
     constructor(){
-        this.persistent_message_handlers.addEventListener("disconnect", this.internal_disconnect_handler);
+        this.persistent_message_handlers.addEventListener("disconnect", this.internal_disconnect_handler);        
     }
     
     connect = () => {
@@ -422,12 +436,34 @@ class BackendLink{
     //Can be interrupted while processing events if an event handler sets "consume" false
     //Returns the number of remaining events in the queue, which will often be 0
     drain_events = ()=> {
-        return this.drain_mutex.lock().then( () => {
+        
+        //If we are the first to fail to lock, we go into the wait queue,
+        //otherwise, our request is dropped and gets completed by whoever is already waiting
+        return this.drain_mutex.lock(true).then( () => {
             var evt;
             while(this.m_consume){
                 evt = this.event_queue.shift();
                 if(evt == null)
                     break;
+                
+                if(evt.type == "native_message"){
+                    var msg = evt.message;
+                    var cls = message_registry.get(msg.type);
+                    if(cls == null)
+                        throw new Error( "Unknown message type from back-end: " + msg.type );
+
+                    //msg is constructed from json
+                    //msg2 is constructed from the class definition in this script
+                    //we take the "enumerable properties" from msg and assign them to msg2
+                    //so that msg2 is the union of json data and the in-script method definitions
+                    //from the message classes, most notably the process() method;
+                    var msg2 = new cls();
+                    Object.assign(msg2, msg);
+                    evt = new ClientMessageEvent(msg2);
+                    this.general_message_consumer(evt); //call process() on the message
+                }
+                
+                //After the message is finished with its inherent processing, dispatch to any listeners
                 this.session_message_handlers.dispatchEvent(evt);
                 this.persistent_message_handlers.dispatchEvent(evt);
             }
@@ -436,9 +472,25 @@ class BackendLink{
     }
     
     message_handler = (msg) => {
-        this.event_queue.push(new NativeMessage(msg));
-        if(this.m_consume && this.event_queue.length == 0)
-            this.drain_events();
+        try{            
+            this.event_queue.push(new NativeMessage(msg));
+            if(this.m_consume && this.event_queue.length == 0)
+                this.drain_events();
+        }
+        catch(ex){
+            notify_ex("Failed processing message from back-end. There is probably some problem with the installation. " + 
+                    "The front and backends may have mismatched versions.", ex);
+        }
+    }
+    
+    //Call process() on the message and let it decide what to do
+    general_message_consumer = (evt) => {
+        try{
+            evt.message.process(this.client_state);
+        }
+        catch(ex){
+            notify_ex("Error processing back-end message", ex);
+        }
     }
             
     disconnect_handler = () => {
@@ -453,6 +505,8 @@ class BackendLink{
         //next session
         this.consume = false;
         
+        this.connected = false;
+        
         //Trigger session-scope timeouts early upon session close
         Object.entries(this.session_pending_timeouts).forEach( (obj)=>{            
             clearTimeout(obj[0]);
@@ -466,21 +520,16 @@ class BackendLink{
     send_message = (msg, timeout) => {
         if(!this.connected)
             this.connect();
-        
-        //Create these first because events come rolling in immediately before return to the browser
-        //How that happens is a total mystery, as it's supposed to require a return to the event loop
-        //Maybe postMessage() calls the event loop
-        var promises = [this.until_session_message( ByeMessage, config.startup_timeout ), this.until_disconnect(config.message_timeout)];
-        
+                        
         if(Array.isArray(msg))
             this.port.postMessage(msg);
         else
             this.port.postMessage( [ msg ] );
         
-        //debugger;
-        //return this.until_session_message( ByeMessage, config.startup_timeout ).then(this.until_disconnect(config.message_timeout));
-        
-        return promises;
+        this.consume = true;
+        var prom = this.until_session_message( ByeMessage, config.startup_timeout ).then(this.until_disconnect(config.message_timeout));
+        this.drain_events();
+        return prom;
     }
     
     until_disconnect = (timeout)=>{
@@ -578,39 +627,16 @@ class Client{
     
     start(){
         return this.link.send_message(new HelloMessage(), config.startup_timeout);     //Send a no-op message to launch the backend/gui
-    }    
-}
-
-// Main
-window.client = null;
-
-function on_init_fail(ex){
-    var msg = "Failed connecting to back-end service. The extension may not be installed properly" + ex !=null ? ex.message : "";
-    notify("Failed connecting to back-end service. The extension may not be installed properly: " + msg);
+    }
+    
+    pin_query(){
+        this.link.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") );
+    }
 }
 
 //backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") ).then( ()=>{
 //    backend.send_message( new PinRequest(321, "https://www.facebook.com/blah/blah/blah") );
 //});
-
-async function fetch_pin_command(){
-    //backend.send_message( new PinRequest(123, "https://www.facebook.com/blah/blah/blah") );
-    notify("starting");
-
-    try{    
-        window.client = new Client();
-        //await client.start().then( ()=>{ notify("READY"); }, on_init_fail );
-        var results = client.start();
-        window.client.link.consume = true;
-        
-        await results[0];
-        debug( "HRM...:" + window.client.link.session_pending_timeouts.length );
-        await results[1];
-    }
-    catch(ex){
-        on_init_fail(ex);
-    }
-}
 
 function browser_command_handler (command) {
   try{
@@ -624,6 +650,31 @@ function browser_command_handler (command) {
   }
 }
 
-browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
+
+// Main
+client = null;
+
+try{
+    notify("starting");    
+    client = new Client();
+    //await client.start().then( ()=>{ notify("READY"); }, on_init_fail );
+    client.start().then( ()=>{
+        browser.commands.onCommand.addListener(browser_command_handler); //Listen for the sign-in hotkey
+        notify("READY");
+    }).catch( (ex)=>{init_fail(ex); });
+}
+catch(ex){
+    init_fail(ex);
+}
+
+function init_fail(ex){
+    var msg = "Failed connecting to back-end service. The extension may not be installed properly" + ex !=null ? ex.message : "";
+    notify(msg);
+}
+
+async function fetch_pin_command(){
+    client.pin_query();    
+}
+
 //browser.runtime.onMessage.addListener(handleMessage);
 
