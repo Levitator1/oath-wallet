@@ -229,12 +229,17 @@ function escape_string(str){
     var str = str.replaceAll("\\", "\\\\");
     
     if(str.charAt(0) == '\'')
-            str = str.replaceAll("'","\\'");
+            str = str.replaceAll(/(?!^)'(?!$)/g, "\\'");
         
     else if(str.charAt(0) == '"')
-            str = str.replaceAll("\"", '\\"');
+            str = str.replaceAll(/(?!^)"(?!$)/g, '\\"');
     else
         throw new Error("Unrecoginzed quote style escaping string");
+    
+    if(str.charAt(0) != str.charAt(str.length - 1))
+        throw new Error("Mismatched quotes");
+    
+    return str;
 }
 
 class PinReply extends SessionMessage{
@@ -273,10 +278,12 @@ class PinReply extends SessionMessage{
     //output_func_script=` constructor(){ alert('EH????????'); } `
     
     process = (state) => {
-        //notify( "WOOTS: " + JSON.stringify(this) );                
-        var script = this.output_func_script + "('" + escape_string(this.pin) + "')";
-        script = script.replaceAll("\n", "");
-        browser.tabs.executeScript(Number(this.session_id), {'code': script}).catch( (ex) => notify_ex("OOPS", ex) );
+        //notify( "WOOTS: " + JSON.stringify(this) );
+        var pinstr = "'" + this.pin + "'";
+        var script = this.output_func_script + "(" + escape_string(pinstr) + ")";
+        //script = script.replaceAll("\n", ""); //Don't know what executeScript() has against linefeeds, but it won't accept them
+        browser.tabs.executeScript(Number(this.session_id), {'code': script})
+                .catch( (ex) => notify_ex("Encountered an error running the PIN insertion script in the browser session", ex) );
     }    
 };
 
@@ -708,9 +715,11 @@ class Client{
     pin_query = async ()=> {
         this.link.until_session_message(PinReply, 3000).catch( () =>
             notify("OATH PIN requested.\nYou may need to activate or touch your key device to proceed."));
-        var session_id = (await this.get_active_tab()).id;       
+        var tab = (await this.get_active_tab());
+        var session_id = tab.id;
+        var session_url = tab.url;
 
-        return this.link.send_message( new PinRequest(session_id, "https://www.facebook.com/blah/blah/blah") );        
+        return this.link.send_message( new PinRequest(session_id, session_url) );        
     }
 }
 

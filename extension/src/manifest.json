@@ -2,7 +2,7 @@
 
   "manifest_version": 2,
   "name": "com.levitator.oath_wallet",
-  "version": "0.1",
+  "version": "0.2",
   "author": "Jose Batista",
 
   "description": "Retrieves the appropriate access code for a web site from a Yubikey",

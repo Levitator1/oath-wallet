@@ -1,0 +1,6 @@
+{"mappings":[
+	{ "cred":"https://www.facebook.com", "url": "https://www.facebook.com/*" },
+	{ "cred":"somewhere", "url": "https://www.somewhere.blah/*" },
+	{ "cred":"test", "url": "file:///home/user/project/oath-wallet/test.html" }
+]}
+

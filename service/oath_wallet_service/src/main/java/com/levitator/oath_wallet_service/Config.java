@@ -20,7 +20,7 @@ public class Config {
 
     public final String pwd = System.getProperty("user.dir");
     public final String app_name = "oath-wallet";
-    public final String app_version = "v0.1";
+    public final String app_version = "v0.2";
     public final String app_title = app_name + " " + app_version;    
         
     //Suitable for a Linux-style environment. Windows users will want something else.

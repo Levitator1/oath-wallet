@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+#java -Xdebug -Xnoagent -Xrunjdwp:transport=dt_shmem,server=y,address=oath_wallet_service,suspend=n -cp "$0.jar:/usr/share/java/*" com.levitator.oath_wallet_service.Main
+
+if [ ! -z "$DEBUG" ]; then
+	java  -agentlib:jdwp=transport=dt_socket,server=y,address=127.0.0.1:5005,suspend=n -cp "$0.jar:/usr/share/java/*" \
+		com.levitator.oath_wallet_service.Main | ( read -s; cat )
+else
+	java  -cp "$0.jar:/usr/share/java/*" com.levitator.oath_wallet_service.Main
+fi
+
