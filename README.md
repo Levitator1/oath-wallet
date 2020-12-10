@@ -2,7 +2,7 @@
 
 V0.02 (First release)
 
-This is the first nominal working release.
+This is the first nominal working release. It is for Firefox and Linux.
 
 This is a plugin for Firefox which integrates Yubikey OATH (2FA/HOTP/TOTP) functionality
 for logging into Web sites with your smartcard/key without having to switch windows to retrieve
@@ -29,13 +29,13 @@ Prerequisites:
    To enable unsigned add-ons navigate to "about:config" by entering it in the URL bar, as a destination. Then search for the setting: 'xpinstall.signatures.required'.
    If there turns out to be interest, then I may look into what is involved in getting the package signed.
 
-2. The ykman tool must be installed and available in your path, as described above. ykman requires Python3 and some other things. See the yubikey-manager documentation.
+2. The ykman tool must be installed and available in your path. ykman requires Python3 and some other things. See the yubikey-manager documentation.
    
 3. The contents of the included bin/ directory can go anywhere, but you will need to update the "path" field in "extension/com.levitator.oath_wallet_service.json"
    to point to the correct path of "com.levitator.oath_wallet_service". That is a shell script, and it expects the jar file to be in the same directory alongside it.
-   A typical location is: $(HOME)/.local/bin. This back-end is built with Java 11, and you will need a suitable Java runtime. It is tested with openjdk-11.
+   A typical location is: $HOME/.local/bin. This back-end is built with Java 11, and you will need a suitable Java runtime. It is tested with openjdk-11.
 
-4. Copy your updated com.levitator.oath_Wallet_service.json file to a directory named "$HOME/.mozilla/native-messaging-hosts/". It does not exist by default.
+4. Copy your updated com.levitator.oath_wallet_service.json file to a directory named "$HOME/.mozilla/native-messaging-hosts/". It does not exist by default.
    It is used to hold the definition files which Firefox uses to associate back-end programs with javascript-based add-on packages.
 
 5.  You should be able to install the XPI file via the usual method, which is to open the main browser menu (three stacked horizontal bars), and go to "Add-Ons"
@@ -46,28 +46,31 @@ Configuration
 =============
 
 Configuration is accomplished using a JSON file which associates OATH credential names (as configured using ykman) with URL glob patterns. Let's say
-you do "ykman oath add gizmo", and now you have an oath credential called "gizmo". You intend to use it to access "https://www.gizmo.narf/", so you might
-select a URL wildcard such as "https://www.gizmo.narf/*", or maybe "https://www.gizmo.narf/login/*", or whatever you might find to be suitably specific.
+you do "ykman oath add gizmo", and now you have an oath credential called "gizmo". You intend to use it to access `"https://www.gizmo.narf/"`, so you might
+select a URL wildcard such as `"https://www.gizmo.narf/*"`, or maybe `"https://www.gizmo.narf/login/*"`, or whatever you might find to be suitably specific.
 
 The JSON file looks like this:
 
+```javascript
 {"mappings":[
 	{ "cred":"https://www.facebook.com", "url": "https://www.facebook.com/*" },
 	{ "cred":"somewhere", "url": "https://www.somewhere.blah/*" },
 	{ "cred":"test", "url": "file:///home/user/project/oath-wallet/test.html" }
 ]}
+```
 
 So, having added gizmo, it would look like this:
 
-
+```javascript
 {"mappings":[
 	{ "cred":"https://www.facebook.com", "url": "https://www.facebook.com/*" },
 	{ "cred":"somewhere", "url": "https://www.somewhere.blah/*" },
 	{ "cred":"test", "url": "file:///home/user/project/oath-wallet/test.html" },
 	{ "cred":"gizmo", "url": "https://www.gizmo.narf/*" }
 ]}
+```
 
-This file belongs in: $HOME/.oath_wallet/mappings.json
+This file belongs in: `$HOME/.oath_wallet/mappings.json`
 You will need to restart the backend to reread this file, and when it starts back up, the console window from clicking
 the system tray icon should tell you how many records were loaded.
 
@@ -78,8 +81,8 @@ IMPORTANT WARNING: You are strongly advised against placing globs (the star symb
 Or, for that matter, anywere prior to the start of the path. So, in other words, use globs only to describe path wildcards, and
 not in the host or protocol.
 
-For example, you might be tempted to do something like "https://*.gizmo.narf/*", to cover multiple subdomains, but don't do that.
-The reason not do that is because this URL also matches that pattern: "https://malice.hax/.gizmo.narf/steal_your_pin_number.php"
+For example, you might be tempted to do something like `"https://*.gizmo.narf/*"`, to cover multiple subdomains, but don't do that.
+The reason not do that is because this URL also matches that pattern: `"https://malice.hax/.gizmo.narf/steal_your_pin_number.php"`
 
 
 TODO
@@ -90,6 +93,13 @@ Well, that's it. Please let me know if you enjoy the add-on, and I might add fea
 - A user interface for editing the mapping file
 - A proper installer so that you don't have to copy files by hand and edit the path in the native-messaging manifest
 
+# Porting
+The backend relies on unix fifos so that client-instances of itself can talk to the main server instance. This may or may not
+be a total pain under Windows. I haven't tried it. It will probably be necessary to adjust the IO code, or to implement
+some alternate transport under Windows. If nothing else, there are paths that need to be adjusted, and there is a call to mkfifo
+which needs to be replaced with whatever mechanism it is under windows that creates named pipes or some  other equivalent construct.
+
+Chromium has partial compatibility with Firefox, so porting to Chromium might be doable, and probably easier than porting OS.
 
 Jose Batista
 Levitat0r@protonmail.com
