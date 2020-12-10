@@ -29,6 +29,8 @@ import jdk.nio.Channels;
 //Is not required to launch as a thread, but can
 public class PipeMode extends Thread implements AutoCloseable{
 
+    static final boolean debug=false;
+    
     //Does nothing if not running as a thread
     @Override
     public void close() throws IOException, InterruptedException {
@@ -133,19 +135,22 @@ public class PipeMode extends Thread implements AutoCloseable{
         state.out.flush();
         
         String msg;
-        if(state == server_to_client){
-            iolog.write( 'O');            
-        }        
-        else
-            iolog.write( 'I' );
         
-        iolog.write(':');
-        iolog.write(' ');
-        
-        var data = Arrays.copyOfRange(buffer.array(), buffer.arrayOffset(), buffer.arrayOffset() + buffer.remaining());        
-        iolog.write(data);
-        iolog.write('\n');
-        iolog.flush();
+        if(debug){
+            if(state == server_to_client){
+                iolog.write( 'O');            
+            }        
+            else
+                iolog.write( 'I' );
+
+            iolog.write(':');
+            iolog.write(' ');
+
+            var data = Arrays.copyOfRange(buffer.array(), buffer.arrayOffset(), buffer.arrayOffset() + buffer.remaining());        
+            iolog.write(data);
+            iolog.write('\n');
+            iolog.flush();
+        }
     }
     
     private void io_loop() throws EOFException, IOException, LockException, InterruptedException{
@@ -182,7 +187,8 @@ public class PipeMode extends Thread implements AutoCloseable{
         try{
             //Initialization which might otherwise go in the constructor, but since it could block,
             //we put it on this code path instead
-            iolog = new FileOutputStream( "/home/j/iolog", true );
+            if(debug)
+                iolog = new FileOutputStream( "/home/j/iolog", true );
             m_main_thread = Thread.currentThread();
             var fifo_out = new PrintStream(new FileOutputStream(Config.instance.fifo_in_path.toFile(), true));
             check_interrupt();
